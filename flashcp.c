@@ -44,6 +44,7 @@
 #include <getopt.h>
 
 #include "common.h"
+#include "h2b.h"
 
 /* for debugging purposes only */
 #ifdef DEBUG
@@ -290,6 +291,7 @@ int main (int argc,char *argv[])
 	struct stat filestat;
 	unsigned char *src,*dest;
 	int ret;
+	char *bin_filename;
 
 	/*********************
 	 * parse cmd-line
@@ -300,8 +302,8 @@ int main (int argc,char *argv[])
 
 	ret = system("modprobe spi_rockchip");
 	if (ret == -1) {
-		printf("Modprobe failed");
-		exit(0);
+		printf("Modprobe failed\n");
+		exit(EXIT_FAILURE);
 	}
 
 	for (;;) {
@@ -352,6 +354,9 @@ int main (int argc,char *argv[])
 		flags |= FLAG_FILENAME;
 		filename = argv[optind];
 		DEBUG("Got filename: %s\n",filename);
+		bin_filename = malloc(strlen(filename) + 5); 
+		strcpy(bin_filename, filename);
+		strcat(bin_filename, ".bin");
 
 		flags |= FLAG_DEVICE;
 		device = "/dev/mtd0";
@@ -366,6 +371,10 @@ int main (int argc,char *argv[])
 
 	atexit (cleanup);
 
+	ret = convert_to_bin(filename, bin_filename);	
+	if (ret < 0)
+		log_failure("convert to binary problem");
+
 	/* get some info about the flash device */
 	dev_fd = safe_open (device,O_SYNC | O_RDWR);
 	if (ioctl (dev_fd,MEMGETINFO,&mtd) < 0)
@@ -375,13 +384,13 @@ int main (int argc,char *argv[])
 	}
 
 	/* get some info about the file we want to copy */
-	fil_fd = safe_open (filename,O_RDONLY);
+	fil_fd = safe_open (bin_filename,O_RDONLY);
 	if (fstat (fil_fd,&filestat) < 0)
-		log_failure("While trying to get the file status of %s: %m\n",filename);
+		log_failure("While trying to get the file status of %s: %m\n",bin_filename);
 
 	/* does it fit into the device/partition? */
 	if (filestat.st_size > mtd.size)
-		log_failure("%s won't fit into %s!\n",filename,device);
+		log_failure("%s won't fit into %s!\n",bin_filename,device);
 
 	src = malloc(mtd.erasesize);
 	if (!src)
@@ -453,7 +462,7 @@ int main (int argc,char *argv[])
 				PERCENTAGE ((unsigned long long)written + i,(unsigned long long)filestat.st_size));
 
 		/* read from filename */
-		safe_read (fil_fd,filename,src,i);
+		safe_read (fil_fd,bin_filename,src,i);
 
 		/* write to device */
 		safe_write(dev_fd,src,i,written,(unsigned long long)filestat.st_size,device);
@@ -470,7 +479,7 @@ int main (int argc,char *argv[])
 	 * verify that flash == file data *
 	 **********************************/
 
-	safe_rewind (fil_fd,filename);
+	safe_rewind (fil_fd,bin_filename);
 	safe_rewind (dev_fd,device);
 	size = filestat.st_size;
 	i = mtd.erasesize;
@@ -485,7 +494,7 @@ int main (int argc,char *argv[])
 				PERCENTAGE ((unsigned long long)written + i,(unsigned long long)filestat.st_size));
 
 		/* read from filename */
-		safe_read (fil_fd,filename,src,i);
+		safe_read (fil_fd,bin_filename,src,i);
 
 		/* read from device */
 		safe_read (dev_fd,device,dest,i);
@@ -502,15 +511,18 @@ int main (int argc,char *argv[])
 			KB ((unsigned long long)filestat.st_size),
 			KB ((unsigned long long)filestat.st_size));
 	DEBUG("Verified %d / %lluk bytes\n",written,(unsigned long long)filestat.st_size);
+	
+	usleep(10000);
 
 	ret = system("rmmod spi_rockchip");
 	if (ret == -1) {
-		printf("Modprobe failed");
-		exit(0);
+		printf("Modprobe failed\n");
+		exit(EXIT_FAILURE);
 	}
 
 	gpio_set_value(RESET_GPIO, "1");
 	gpio_set_value(CONDONE_GPIO, "1");
+	free(bin_filename);
 
 	exit (EXIT_SUCCESS);
 
@@ -518,7 +530,7 @@ int main (int argc,char *argv[])
 	 * Copy different blocks from file to device *
 	 ********************************************/
 DIFF_BLOCKS:
-	safe_rewind (fil_fd,filename);
+	safe_rewind (fil_fd,bin_filename);
 	safe_rewind (dev_fd,device);
 	size = filestat.st_size;
 	i = mtd.erasesize;
@@ -538,7 +550,7 @@ DIFF_BLOCKS:
 		log_verbose ("\rProcessing blocks: %d/%d (%d%%)", s, blocks, PERCENTAGE (s,blocks));
 
 		/* read from filename */
-		safe_read (fil_fd,filename,src,i);
+		safe_read (fil_fd,bin_filename,src,i);
 
 		/* read from device */
 		current_dev_block = safe_lseek(dev_fd, 0, SEEK_CUR, device);
@@ -572,6 +584,16 @@ DIFF_BLOCKS:
 	}
 
 	log_verbose ("\ndiff blocks: %d\n", diffBlock);
+
+	ret = system("rmmod spi_rockchip");
+	if (ret == -1) {
+		printf("Modprobe failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+	gpio_set_value(RESET_GPIO, "1");
+	gpio_set_value(CONDONE_GPIO, "1");
+	free(bin_filename);
 
 	exit (EXIT_SUCCESS);
 }

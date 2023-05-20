@@ -94,6 +94,7 @@ err:
 	return -1;
 }
 
+/*
 int main (int argc,char *argv[])
 {
 	const char* inp = NULL;
@@ -113,3 +114,4 @@ int main (int argc,char *argv[])
 		exit(EXIT_FAILURE);
 	exit(EXIT_SUCCESS);
 }
+*/
