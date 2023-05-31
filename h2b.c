@@ -27,15 +27,17 @@ int convert_to_bin(const char* inp, const char* out)
 	unsigned int i = 0;
 	unsigned int count = 0;
 	int length;
+	int ret = 0;
 	char c;
 	size_t elements_written;
 	data = malloc(sizeof(char) * 5);
 	array = malloc(sizeof(uint8_t) * 3560000);
 
 	input = fopen(inp, "r");
-	if (input == NULL) {
+	if (!input) {
 		printf("Unable to open %s\n", inp);
-		goto err;
+		ret = -1;
+		goto err_input;
 	}
 
 	while(!feof(input))
@@ -51,13 +53,14 @@ int convert_to_bin(const char* inp, const char* out)
 	input = fopen(inp, "r");
 	if (input == NULL) {
 		printf("Unable to open %s\n", inp);
-		goto err;
+		ret = -1;
 	}
 
 	output = fopen(out, "wb");
 	if (output == NULL) {
 		printf("Unable to open %s\n", out);
-		goto err;
+		ret = -1;
+		goto err_output;
 	}
 
 	while ((nread = getline(&line, &len, input)) != -1) {
@@ -65,7 +68,7 @@ int convert_to_bin(const char* inp, const char* out)
 		strcat(data, line);
 		if (nread != 3) {
 			printf("File is not properly formatted: %s\n", data);
-			goto err;
+			ret = -1;
 		}
 		data[strcspn(data, "\n")] = 0;
 		array[i] = (uint8_t) strtol(data, NULL, 16);
@@ -76,42 +79,16 @@ int convert_to_bin(const char* inp, const char* out)
 
 	if (elements_written != count) {
 		printf("File is not properly written!\n");
-		goto err;
+		ret = -1;
 	}
 
+	fclose(output);
+err_output:
+	fclose(input);
+err_input:
 	free(line);
 	free(data);
 	free(array);
-	fclose(input);
-	fclose(output);
-	return 0;
-err:
-	free(line);
-	free(data);
-	free(array);
-	fclose(input);
-	fclose(output);
-	return -1;
+
+	return ret;
 }
-
-/*
-int main (int argc,char *argv[])
-{
-	const char* inp = NULL;
-	const char* out = NULL;
-	int ret;
-
-	if (argc != 3) {
-		printf("Specify inputs and outputs properly\n");
-		exit(EXIT_FAILURE);
-	}
-
-	inp = argv[1];
-	out = argv[2];
-
-	ret = convert_to_bin(inp, out);
-	if (ret < 0) 
-		exit(EXIT_FAILURE);
-	exit(EXIT_SUCCESS);
-}
-*/

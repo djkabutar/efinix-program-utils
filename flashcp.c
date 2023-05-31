@@ -129,6 +129,9 @@ static int safe_open (const char *pathname,int flags)
 	const char *access = "unknown";
 	int fd;
 
+	if (!pathname)
+		log_failure("No filename specified\n");
+
 	fd = open (pathname,flags);
 	if (fd < 0)
 	{
@@ -228,16 +231,16 @@ static int gpio_set_value(const char* pin, const char* value)
 	char* gpio_direction;
 	gpio_direction = malloc(strlen(default_gpio) + 14);
 	strcpy(gpio_direction, default_gpio);
-	strcat(gpio_direction, pin); 
+	strcat(gpio_direction, pin);
 	strcat(gpio_direction, "/direction");
 
 	char* gpio_value;
 	gpio_value = malloc(strlen(default_gpio) + 10);
 	strcpy(gpio_value, default_gpio);
-	strcat(gpio_value, pin); 
+	strcat(gpio_value, pin);
 	strcat(gpio_value, "/value");
 
-	int fd = open(export, O_WRONLY);	
+	int fd = open(export, O_WRONLY);
 	if (fd == -1) {
 		printf("Unable to open gpio export\n");
 	}
@@ -249,7 +252,7 @@ static int gpio_set_value(const char* pin, const char* value)
 	close(fd);
 
 	fd = open(gpio_direction, O_WRONLY);
-	if (fd == -1) {
+	if (fd) {
 		printf("Unable to open %s\n", gpio_direction);
 	}
 
@@ -268,6 +271,8 @@ static int gpio_set_value(const char* pin, const char* value)
 		printf("Error writing to %s\n", gpio_value);
 	}
 
+	free(gpio_direction);
+	free(gpio_value);
 	close(fd);
 
 	fd = open(unexport, O_WRONLY);
@@ -286,7 +291,7 @@ static int gpio_set_value(const char* pin, const char* value)
 
 int main (int argc,char *argv[])
 {
-	const char *filename = NULL,*device = NULL;
+	const char *filename = NULL, *device = "/dev/mtd0";
 	int i,flags = FLAG_NONE;
 	size_t size,written;
 	struct mtd_info_user mtd;
@@ -294,7 +299,7 @@ int main (int argc,char *argv[])
 	struct stat filestat;
 	unsigned char *src,*dest;
 	int ret;
-	char *bin_filename;
+	char *bin_filename = NULL;
 
 	/*********************
 	 * parse cmd-line
@@ -357,12 +362,11 @@ int main (int argc,char *argv[])
 		flags |= FLAG_FILENAME;
 		filename = argv[optind];
 		DEBUG("Got filename: %s\n",filename);
-		bin_filename = malloc(strlen(filename) + 5); 
+		bin_filename = malloc(strlen(filename) + 5);
 		strcpy(bin_filename, filename);
 		strcat(bin_filename, ".bin");
 
 		flags |= FLAG_DEVICE;
-		device = "/dev/mtd0";
 		printf("Got device: %s\n",device);
 	}
 
@@ -374,7 +378,7 @@ int main (int argc,char *argv[])
 
 	atexit (cleanup);
 
-	ret = convert_to_bin(filename, bin_filename);	
+	ret = convert_to_bin(filename, bin_filename);
 	if (ret < 0)
 		log_failure("convert to binary problem");
 
@@ -514,9 +518,11 @@ int main (int argc,char *argv[])
 			KB ((unsigned long long)filestat.st_size),
 			KB ((unsigned long long)filestat.st_size));
 	DEBUG("Verified %d / %lluk bytes\n",written,(unsigned long long)filestat.st_size);
-	
+
+	// Cleanup device handler and file handler
+	cleanup();
 	usleep(10000);
-	
+
 	ret = delete_module("spi_rockchip", O_TRUNC);
 	if (ret != 0) {
 		// printf("rmmod failed with return code: %d\n", ret);
