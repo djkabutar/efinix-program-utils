@@ -238,12 +238,12 @@ static int gpio_set_value(const char* pin, const char* value)
 	fd = open(export, O_WRONLY);
 	if (fd < 0) {
 		printf("Unable to open gpio export\n");
-		goto err;
+		goto err_export;
 	}
 
 	if (write(fd, pin, 3) != 3) {
 		printf("Error writing to Export\n");
-		goto err;
+		goto err_export;
 	}
 
 	close(fd);
@@ -251,33 +251,30 @@ static int gpio_set_value(const char* pin, const char* value)
 	fd = open(gpio_value, O_WRONLY);
 	if (fd < 0) {
 		printf("Unable to open %s\n", gpio_value);
-		goto err;
+		goto err_gpio;
 	}
 
-	if (write(fd, value, 1) != 1) {
+	if (write(fd, value, 1) != 1)
 		printf("Error writing to %s\n", gpio_value);
-		goto err;
-	}
 
+err_gpio:
+	free(gpio_value);
 	close(fd);
 
 	fd = open(unexport, O_WRONLY);
 	if (fd < 0) {
 		printf("Unable to open %s\n", unexport);
-		goto err;
+		goto err_export;
 	}
 
 	if (write(fd, pin, 3) != 3) {
 		printf("Error writing to %s\n", unexport);
-		goto err;
+		goto err_export;
 	}
 
-	free(gpio_value);
 	close(fd);
 	return 0;
 
-err_gpio:
-	free(gpio_value);
 err_export:
 	close(fd);
 	return -1;
@@ -301,6 +298,15 @@ int main (int argc,char *argv[])
 
 	gpio_set_value(RESET_GPIO, "0");
 	gpio_set_value(CONDONE_GPIO, "0");
+
+	ret = system("lsmod | grep spi_rockchip");
+	if (ret == 0) {
+		ret = delete_module("spi_rockchip", O_TRUNC);
+		if (ret != 0) {
+			printf("Not able to remove spi_rockchip module\n");
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	ret = system("modprobe spi_rockchip");
 	if (ret == -1) {
