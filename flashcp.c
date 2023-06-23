@@ -227,12 +227,7 @@ static int gpio_set_value(const char* pin, const char* value)
 	const char* export = "/sys/class/gpio/export";
 	const char* unexport = "/sys/class/gpio/unexport";
 	const char* default_gpio = "/sys/class/gpio/gpio";
-
-	char* gpio_direction;
-	gpio_direction = malloc(strlen(default_gpio) + 14);
-	strcpy(gpio_direction, default_gpio);
-	strcat(gpio_direction, pin);
-	strcat(gpio_direction, "/direction");
+	int fd = -1;
 
 	char* gpio_value;
 	gpio_value = malloc(strlen(default_gpio) + 10);
@@ -240,53 +235,52 @@ static int gpio_set_value(const char* pin, const char* value)
 	strcat(gpio_value, pin);
 	strcat(gpio_value, "/value");
 
-	int fd = open(export, O_WRONLY);
-	if (fd == -1) {
+	fd = open(export, O_WRONLY);
+	if (fd < 0) {
 		printf("Unable to open gpio export\n");
+		goto err;
 	}
 
 	if (write(fd, pin, 3) != 3) {
 		printf("Error writing to Export\n");
-	}
-
-	close(fd);
-
-	fd = open(gpio_direction, O_WRONLY);
-	if (fd) {
-		printf("Unable to open %s\n", gpio_direction);
-	}
-
-	if (write(fd, "out", 3) != 3) {
-		printf("Error writing to %s\n", gpio_direction);
+		goto err;
 	}
 
 	close(fd);
 
 	fd = open(gpio_value, O_WRONLY);
-	if (fd == -1) {
+	if (fd < 0) {
 		printf("Unable to open %s\n", gpio_value);
+		goto err;
 	}
 
 	if (write(fd, value, 1) != 1) {
 		printf("Error writing to %s\n", gpio_value);
+		goto err;
 	}
 
-	free(gpio_direction);
-	free(gpio_value);
 	close(fd);
 
 	fd = open(unexport, O_WRONLY);
-	if (fd == -1) {
+	if (fd < 0) {
 		printf("Unable to open %s\n", unexport);
+		goto err;
 	}
 
 	if (write(fd, pin, 3) != 3) {
 		printf("Error writing to %s\n", unexport);
+		goto err;
 	}
 
+	free(gpio_value);
 	close(fd);
-
 	return 0;
+
+err_gpio:
+	free(gpio_value);
+err_export:
+	close(fd);
+	return -1;
 }
 
 int main (int argc,char *argv[])
