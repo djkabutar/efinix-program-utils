@@ -229,6 +229,12 @@ static int gpio_set_value(const char* pin, const char* value)
 	const char* default_gpio = "/sys/class/gpio/gpio";
 	int fd = -1;
 
+	char* gpio_direction;
+	gpio_direction = malloc(strlen(default_gpio) + 14);
+	strcpy(gpio_direction, default_gpio);
+	strcat(gpio_direction, pin);
+	strcat(gpio_direction, "/direction");
+
 	char* gpio_value;
 	gpio_value = malloc(strlen(default_gpio) + 10);
 	strcpy(gpio_value, default_gpio);
@@ -248,6 +254,21 @@ static int gpio_set_value(const char* pin, const char* value)
 
 	close(fd);
 
+	usleep(100000);
+
+	fd = open(gpio_direction, O_WRONLY);
+	if (fd < 0) {
+		printf("Unable to open %s\n", gpio_direction);
+		goto err_gpio;
+	}
+
+	if (write(fd, "out", 3) != 3) {
+		printf("Error writing to %s\n", gpio_direction);
+		goto err_gpio;
+	}
+
+	close(fd);
+
 	fd = open(gpio_value, O_WRONLY);
 	if (fd < 0) {
 		printf("Unable to open %s\n", gpio_value);
@@ -258,24 +279,28 @@ static int gpio_set_value(const char* pin, const char* value)
 		printf("Error writing to %s\n", gpio_value);
 
 err_gpio:
+	free(gpio_direction);
 	free(gpio_value);
 	close(fd);
 
 	fd = open(unexport, O_WRONLY);
 	if (fd < 0) {
 		printf("Unable to open %s\n", unexport);
-		goto err_export;
+		goto err_unexport;
 	}
 
 	if (write(fd, pin, 3) != 3) {
 		printf("Error writing to %s\n", unexport);
-		goto err_export;
+		goto err_unexport;
 	}
 
 	close(fd);
 	return 0;
 
+err_unexport:
 err_export:
+	free(gpio_value);
+	free(gpio_direction);
 	close(fd);
 	return -1;
 }
@@ -291,27 +316,34 @@ int main (int argc,char *argv[])
 	unsigned char *src,*dest;
 	int ret;
 	char *bin_filename = NULL;
+	char *env = getenv("USER");
 
 	/*********************
 	 * parse cmd-line
 	 *****************/
+
+	if (strcmp(env, "root") != 0) {
+		log_failure("Permission denied! Try to run it with sudo.\n");
+		// exit(EXIT_FAILURE);
+	}
 
 	gpio_set_value(RESET_GPIO, "0");
 	gpio_set_value(CONDONE_GPIO, "0");
 
 	ret = system("lsmod | grep spi_rockchip");
 	if (ret == 0) {
+		cleanup();
 		ret = delete_module("spi_rockchip", O_TRUNC);
 		if (ret != 0) {
-			printf("Not able to remove spi_rockchip module\n");
-			exit(EXIT_FAILURE);
+			log_failure("Not able to remove spi_rockchip module\n");
+			// exit(EXIT_FAILURE);
 		}
 	}
 
 	ret = system("modprobe spi_rockchip");
 	if (ret == -1) {
-		printf("Modprobe failed\n");
-		exit(EXIT_FAILURE);
+		log_failure("Modprobe failed\n");
+		// exit(EXIT_FAILURE);
 	}
 
 	for (;;) {
@@ -367,7 +399,6 @@ int main (int argc,char *argv[])
 		strcat(bin_filename, ".bin");
 
 		flags |= FLAG_DEVICE;
-		printf("Got device: %s\n",device);
 	}
 
 	/*if (flags & FLAG_HELP || device == NULL)
@@ -380,7 +411,7 @@ int main (int argc,char *argv[])
 
 	ret = convert_to_bin(filename, bin_filename);
 	if (ret < 0)
-		log_failure("convert to binary problem");
+		log_failure("Convert to binary problem.\n");
 
 	/* get some info about the flash device */
 	dev_fd = safe_open (device,O_SYNC | O_RDWR);

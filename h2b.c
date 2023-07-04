@@ -33,6 +33,12 @@ int convert_to_bin(const char* inp, const char* out)
 	data = malloc(sizeof(char) * 5);
 	array = malloc(sizeof(uint8_t) * 3560000);
 
+	if(!inp) {
+		printf("Specify filename!\n");
+		ret = -1;
+		goto err_input;
+	}
+
 	input = fopen(inp, "r");
 	if (!input) {
 		printf("Unable to open %s\n", inp);
