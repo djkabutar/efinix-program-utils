@@ -49,7 +49,7 @@
 
 #define KB(x) ((x) / 1024)
 #define PERCENTAGE(x, total) (((x)*100) / (total))
-#define delete_module(module, flags) syscall(SYS_delete_module, module, flags)
+#define delete_module(name, flags) syscall(__NR_delete_module, name, flags)
 
 /* cmd-line flags */
 #define FLAG_NONE 0x00
