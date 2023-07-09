@@ -30,6 +30,7 @@
  */
 
 #define PROGRAM_NAME "flashcp"
+#define VERSION "1.0"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -45,7 +46,6 @@
 #include <sys/syscall.h>
 #include <errno.h>
 
-#include "common.h"
 #include "h2b.h"
 
 /* for debugging purposes only */
@@ -80,6 +80,13 @@
 #define LOG_NORMAL 1
 #define LOG_ERROR 2
 
+/* for tagging functions that always exit */
+#if defined(__GNUC__) || defined(__clang__)
+	#define NORETURN __attribute__((noreturn))
+#else
+	#define NORETURN
+#endif
+
 static NORETURN void log_failure(const char *fmt, ...)
 {
 	va_list ap;
@@ -105,7 +112,7 @@ static void log_verbose(const char *fmt, ...)
 	fflush(stdout);
 }
 
-static NORETURN void showusage(bool error)
+static NORETURN void showusage(int error)
 {
 	fprintf(error ? stderr : stdout,
 		"\n"
@@ -391,12 +398,12 @@ int main(int argc, char *argv[])
 			DEBUG("Got FLAG_ERASE_ALL\n");
 			break;
 		case 'V':
-			common_print_version();
+			printf("%s: Version: %s\n", PROGRAM_NAME, VERSION);
 			exit(EXIT_SUCCESS);
 			break;
 		default:
 			DEBUG("Unknown parameter: %s\n", argv[option_index]);
-			showusage(true);
+			showusage(1);
 		}
 	}
 	if (optind + 1 == argc) {

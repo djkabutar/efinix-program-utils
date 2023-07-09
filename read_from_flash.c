@@ -14,7 +14,6 @@
 #include <sys/syscall.h>
 #include <errno.h>
 
-#include "common.h"
 #include "h2b.h"
 
 #define RESET_GPIO "509"
