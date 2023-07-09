@@ -46,13 +46,7 @@ int convert_to_bin(const char *inp, const char *out)
 			count++;
 		}
 	}
-	fclose(input);
-
-	input = fopen(inp, "r");
-	if (input == NULL) {
-		printf("Unable to open %s\n", inp);
-		ret = -1;
-	}
+	fseek(input, 0, SEEK_SET);
 
 	output = fopen(out, "wb");
 	if (output == NULL) {
