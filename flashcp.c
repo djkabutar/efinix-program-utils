@@ -59,9 +59,6 @@
 #define FLAG_ERASE_ALL 0x10
 #define FLAG_PARTITION 0x20
 
-#define RESET_GPIO "509"
-#define CONDONE_GPIO "510"
-
 static NORETURN void showusage(int error)
 {
 	fprintf(error ? stderr : stdout,
