@@ -2,3 +2,5 @@
 *.s
 
 out/
+fcp
+read_from_flash
