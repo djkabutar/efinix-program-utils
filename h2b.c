@@ -20,7 +20,6 @@ int convert_to_bin(const char *inp, const char *out)
 	uint8_t *array;
 	unsigned int i = 0;
 	unsigned int count = 0;
-	int length;
 	int ret = 0;
 	char c;
 	size_t elements_written;
