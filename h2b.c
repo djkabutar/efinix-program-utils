@@ -4,16 +4,10 @@
  * All rights reserved.
  */
 #include <stdio.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <getopt.h>
-
-#include "h2b.h"
 
 int convert_to_bin(const char *inp, const char *out)
 {
