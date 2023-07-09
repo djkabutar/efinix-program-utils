@@ -1,6 +1,6 @@
 #include "flashcp.h"
 
-int main(int argc, char *argv[])
+int main(void)
 {
 	gpio_set_value(RESET_GPIO, "1");
 	gpio_set_value(CONDONE_GPIO, "1");
