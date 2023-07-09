@@ -67,6 +67,7 @@ int convert_to_bin(const char *inp, const char *out)
 		if (nread != 3) {
 			printf("File is not properly formatted: %s\n", data);
 			ret = -1;
+			goto err_read;
 		}
 		data[strcspn(data, "\n")] = 0;
 		array[i] = (uint8_t)strtol(data, NULL, 16);
@@ -80,11 +81,12 @@ int convert_to_bin(const char *inp, const char *out)
 		ret = -1;
 	}
 
+err_read:
+	free(line);
 	fclose(output);
 err_output:
 	fclose(input);
 err_input:
-	free(line);
 	free(data);
 	free(array);
 
