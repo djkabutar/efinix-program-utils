@@ -32,14 +32,14 @@
 #include <sys/sysmacros.h>
 
 #ifndef PROGRAM_NAME
-# error "You must define PROGRAM_NAME before including this header"
+#error "You must define PROGRAM_NAME before including this header"
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef MIN	/* some C lib headers define this for us */
+#ifndef MIN /* some C lib headers define this for us */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 #ifndef MAX
@@ -48,20 +48,22 @@ extern "C" {
 #define min(a, b) MIN(a, b) /* glue for linux kernel source */
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
-#define ALIGN(x,a) __ALIGN_MASK(x,(typeof(x))(a)-1)
-#define __ALIGN_MASK(x,mask) (((x)+(mask))&~(mask))
+#define ALIGN(x, a) __ALIGN_MASK(x, (typeof(x))(a)-1)
+#define __ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
 
-#define min_t(t,x,y) ({ \
-	typeof((x)) _x = (x); \
-	typeof((y)) _y = (y); \
-	(_x < _y) ? _x : _y; \
-})
+#define min_t(t, x, y)                \
+	({                            \
+		typeof((x)) _x = (x); \
+		typeof((y)) _y = (y); \
+		(_x < _y) ? _x : _y;  \
+	})
 
-#define max_t(t,x,y) ({ \
-	typeof((x)) _x = (x); \
-	typeof((y)) _y = (y); \
-	(_x > _y) ? _x : _y; \
-})
+#define max_t(t, x, y)                \
+	({                            \
+		typeof((x)) _x = (x); \
+		typeof((y)) _y = (y); \
+		(_x > _y) ? _x : _y;  \
+	})
 
 /*
  * This looks more complex than it should be. But we need to
@@ -70,7 +72,7 @@ extern "C" {
  * arguments just once each.
  */
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
-#define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
+#define round_up(x, y) ((((x)-1) | __round_mask(x, y)) + 1)
 #define round_down(x, y) ((x) & ~__round_mask(x, y))
 
 #ifndef O_CLOEXEC
@@ -78,52 +80,63 @@ extern "C" {
 #endif
 
 /* Verbose messages */
-#define bareverbose(verbose, fmt, ...) do {                        \
-	if (verbose)                                               \
-		printf(fmt, ##__VA_ARGS__);                        \
-} while(0)
+#define bareverbose(verbose, fmt, ...)              \
+	do {                                        \
+		if (verbose)                        \
+			printf(fmt, ##__VA_ARGS__); \
+	} while (0)
 #define verbose(verbose, fmt, ...) \
 	bareverbose(verbose, "%s: " fmt "\n", PROGRAM_NAME, ##__VA_ARGS__)
 
 /* Normal messages */
-#define normsg_cont(fmt, ...) do {                                 \
-	printf("%s: " fmt, PROGRAM_NAME, ##__VA_ARGS__);           \
-} while(0)
-#define normsg(fmt, ...) do {                                      \
-	normsg_cont(fmt "\n", ##__VA_ARGS__);                      \
-} while(0)
+#define normsg_cont(fmt, ...)                                    \
+	do {                                                     \
+		printf("%s: " fmt, PROGRAM_NAME, ##__VA_ARGS__); \
+	} while (0)
+#define normsg(fmt, ...)                              \
+	do {                                          \
+		normsg_cont(fmt "\n", ##__VA_ARGS__); \
+	} while (0)
 
 /* Error messages */
-#define errmsg(fmt, ...)  ({                                                \
-	fprintf(stderr, "%s: error!: " fmt "\n", PROGRAM_NAME, ##__VA_ARGS__); \
-	-1;                                                                 \
-})
-#define errmsg_die(fmt, ...) do {                                           \
-	exit(errmsg(fmt, ##__VA_ARGS__));                                   \
-} while(0)
+#define errmsg(fmt, ...)                                               \
+	({                                                             \
+		fprintf(stderr, "%s: error!: " fmt "\n", PROGRAM_NAME, \
+			##__VA_ARGS__);                                \
+		-1;                                                    \
+	})
+#define errmsg_die(fmt, ...)                      \
+	do {                                      \
+		exit(errmsg(fmt, ##__VA_ARGS__)); \
+	} while (0)
 
 /* System error messages */
-#define sys_errmsg(fmt, ...)  ({                                            \
-	int _err = errno;                                                   \
-	errmsg(fmt, ##__VA_ARGS__);                                         \
-	fprintf(stderr, "%*serror %d (%s)\n", (int)sizeof(PROGRAM_NAME) + 1,\
-		"", _err, strerror(_err));                                  \
-	-1;                                                                 \
-})
-#define sys_errmsg_die(fmt, ...) do {                                       \
-	exit(sys_errmsg(fmt, ##__VA_ARGS__));                               \
-} while(0)
+#define sys_errmsg(fmt, ...)                                     \
+	({                                                       \
+		int _err = errno;                                \
+		errmsg(fmt, ##__VA_ARGS__);                      \
+		fprintf(stderr, "%*serror %d (%s)\n",            \
+			(int)sizeof(PROGRAM_NAME) + 1, "", _err, \
+			strerror(_err));                         \
+		-1;                                              \
+	})
+#define sys_errmsg_die(fmt, ...)                      \
+	do {                                          \
+		exit(sys_errmsg(fmt, ##__VA_ARGS__)); \
+	} while (0)
 
 /* Warnings */
-#define warnmsg(fmt, ...) do {                                                \
-	fprintf(stderr, "%s: warning!: " fmt "\n", PROGRAM_NAME, ##__VA_ARGS__); \
-} while(0)
+#define warnmsg(fmt, ...)                                                \
+	do {                                                             \
+		fprintf(stderr, "%s: warning!: " fmt "\n", PROGRAM_NAME, \
+			##__VA_ARGS__);                                  \
+	} while (0)
 
 /* for tagging functions that always exit */
 #if defined(__GNUC__) || defined(__clang__)
-	#define NORETURN __attribute__((noreturn))
+#define NORETURN __attribute__((noreturn))
 #else
-	#define NORETURN
+#define NORETURN
 #endif
 
 /**
@@ -135,21 +148,26 @@ static inline bool prompt(const char *msg, bool def)
 	char line[64];
 
 	do {
-		normsg_cont("%s (%c/%c) ", msg, def ? 'Y' : 'y', def ? 'n' : 'N');
+		normsg_cont("%s (%c/%c) ", msg, def ? 'Y' : 'y',
+			    def ? 'n' : 'N');
 		fflush(stdout);
 
 		if (fgets(line, sizeof(line), stdin) == NULL) {
 			printf("failed to read prompt; assuming '%s'\n",
-				def ? "yes" : "no");
+			       def ? "yes" : "no");
 			break;
 		}
 
 		if (strcmp("\n", line) != 0) {
 			switch (line[0]) {
 			case 'N':
-			case 'n': ret = false; break;
+			case 'n':
+				ret = false;
+				break;
 			case 'Y':
-			case 'y': ret = true; break;
+			case 'y':
+				ret = true;
+				break;
 			default:
 				puts("unknown response; please try again");
 				continue;
@@ -207,35 +225,35 @@ static inline int buffer_check_pattern(unsigned char *buffer, size_t size,
  * if (error || ... if needed, your check that num is not out of range ...)
  * 	error_happened();
  */
-#define simple_strtoX(func, type) \
-static inline type simple_##func(const char *snum, int *error) \
-{ \
-	char *endptr; \
-	type ret = func(snum, &endptr, 0); \
- \
-	if (error && (!*snum || *endptr)) { \
-		errmsg("%s: unable to parse the number '%s'", #func, snum); \
-		*error = 1; \
-	} \
- \
-	return ret; \
-}
-simple_strtoX(strtol, long int)
-simple_strtoX(strtoll, long long int)
-simple_strtoX(strtoul, unsigned long int)
-simple_strtoX(strtoull, unsigned long long int)
+#define simple_strtoX(func, type)                                            \
+	static inline type simple_##func(const char *snum, int *error)       \
+	{                                                                    \
+		char *endptr;                                                \
+		type ret = func(snum, &endptr, 0);                           \
+                                                                             \
+		if (error && (!*snum || *endptr)) {                          \
+			errmsg("%s: unable to parse the number '%s'", #func, \
+			       snum);                                        \
+			*error = 1;                                          \
+		}                                                            \
+                                                                             \
+		return ret;                                                  \
+	}
+simple_strtoX(strtol, long int) simple_strtoX(strtoll, long long int)
+	simple_strtoX(strtoul, unsigned long int)
+		simple_strtoX(strtoull, unsigned long long int)
 
 #define VERSION 1
 
 /* Simple version-printing for utils */
-#define common_print_version() \
-do { \
-	printf("%s (mtd-utils) %s\n", PROGRAM_NAME, VERSION); \
-} while (0)
+#define common_print_version()                                        \
+	do {                                                          \
+		printf("%s (mtd-utils) %s\n", PROGRAM_NAME, VERSION); \
+	} while (0)
 
 #include "xalloc.h"
 
-long long util_get_bytes(const char *str);
+			long long util_get_bytes(const char *str);
 void util_print_bytes(long long bytes, int bracket);
 int util_srand(void);
 

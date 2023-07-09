@@ -20,26 +20,26 @@
 #define RESET_GPIO "509"
 #define CONDONE_GPIO "510"
 
-static int gpio_set_value(const char* pin, const char* value)
+static int gpio_set_value(const char *pin, const char *value)
 {
-	const char* gpio_path = "/sys/class/gpio";
-	const char* export = "/sys/class/gpio/export";
-	const char* unexport = "/sys/class/gpio/unexport";
-	const char* default_gpio = "/sys/class/gpio/gpio";
+	const char *gpio_path = "/sys/class/gpio";
+	const char *export = "/sys/class/gpio/export";
+	const char *unexport = "/sys/class/gpio/unexport";
+	const char *default_gpio = "/sys/class/gpio/gpio";
 
-	char* gpio_direction;
+	char *gpio_direction;
 	gpio_direction = malloc(strlen(default_gpio) + 14);
 	strcpy(gpio_direction, default_gpio);
-	strcat(gpio_direction, pin); 
+	strcat(gpio_direction, pin);
 	strcat(gpio_direction, "/direction");
 
-	char* gpio_value;
+	char *gpio_value;
 	gpio_value = malloc(strlen(default_gpio) + 10);
 	strcpy(gpio_value, default_gpio);
-	strcat(gpio_value, pin); 
+	strcat(gpio_value, pin);
 	strcat(gpio_value, "/value");
 
-	int fd = open(export, O_WRONLY);	
+	int fd = open(export, O_WRONLY);
 	if (fd == -1) {
 		printf("Unable to open gpio export\n");
 	}
@@ -86,7 +86,7 @@ static int gpio_set_value(const char* pin, const char* value)
 	return 0;
 }
 
-int main (int argc,char *argv[])
+int main(int argc, char *argv[])
 {
 	gpio_set_value(RESET_GPIO, "1");
 	gpio_set_value(CONDONE_GPIO, "1");

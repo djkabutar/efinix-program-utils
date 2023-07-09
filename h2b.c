@@ -15,7 +15,7 @@
 
 #include "h2b.h"
 
-int convert_to_bin(const char* inp, const char* out)
+int convert_to_bin(const char *inp, const char *out)
 {
 	FILE *input;
 	FILE *output;
@@ -33,7 +33,7 @@ int convert_to_bin(const char* inp, const char* out)
 	data = malloc(sizeof(char) * 5);
 	array = malloc(sizeof(uint8_t) * 3560000);
 
-	if(!inp) {
+	if (!inp) {
 		printf("Specify filename!\n");
 		ret = -1;
 		goto err_input;
@@ -46,11 +46,9 @@ int convert_to_bin(const char* inp, const char* out)
 		goto err_input;
 	}
 
-	while(!feof(input))
-	{
+	while (!feof(input)) {
 		c = fgetc(input);
-		if(c == '\n')
-		{
+		if (c == '\n') {
 			count++;
 		}
 	}
@@ -77,7 +75,7 @@ int convert_to_bin(const char* inp, const char* out)
 			ret = -1;
 		}
 		data[strcspn(data, "\n")] = 0;
-		array[i] = (uint8_t) strtol(data, NULL, 16);
+		array[i] = (uint8_t)strtol(data, NULL, 16);
 		i++;
 	}
 

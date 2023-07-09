@@ -36,8 +36,7 @@
  * when people include this header but don't use every function.
  */
 
-__attribute__((unused))
-static void *xmalloc(size_t size)
+__attribute__((unused)) static void *xmalloc(size_t size)
 {
 	void *ptr = malloc(size);
 
@@ -46,8 +45,7 @@ static void *xmalloc(size_t size)
 	return ptr;
 }
 
-__attribute__((unused))
-static void *xcalloc(size_t nmemb, size_t size)
+__attribute__((unused)) static void *xcalloc(size_t nmemb, size_t size)
 {
 	void *ptr = calloc(nmemb, size);
 
@@ -56,14 +54,12 @@ static void *xcalloc(size_t nmemb, size_t size)
 	return ptr;
 }
 
-__attribute__((unused))
-static void *xzalloc(size_t size)
+__attribute__((unused)) static void *xzalloc(size_t size)
 {
 	return xcalloc(1, size);
 }
 
-__attribute__((unused))
-static void *xrealloc(void *ptr, size_t size)
+__attribute__((unused)) static void *xrealloc(void *ptr, size_t size)
 {
 	ptr = realloc(ptr, size);
 	if (ptr == NULL && size != 0)
@@ -71,8 +67,7 @@ static void *xrealloc(void *ptr, size_t size)
 	return ptr;
 }
 
-__attribute__((unused))
-static char *xstrdup(const char *s)
+__attribute__((unused)) static char *xstrdup(const char *s)
 {
 	char *t;
 
@@ -86,8 +81,7 @@ static char *xstrdup(const char *s)
 
 #ifdef _GNU_SOURCE
 
-__attribute__((unused))
-static int xasprintf(char **strp, const char *fmt, ...)
+__attribute__((unused)) static int xasprintf(char **strp, const char *fmt, ...)
 {
 	int cnt;
 	va_list ap;
