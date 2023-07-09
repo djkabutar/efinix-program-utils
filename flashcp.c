@@ -341,6 +341,11 @@ int main(int argc, char *argv[])
 	char *bin_filename = NULL;
 	char *env = getenv("USER");
 
+	if (env == NULL) {
+		log_failure("Not able to get USER env variable\n");
+		// exit(EXIT_FAILURE);
+	}
+
 	/*********************
 	 * parse cmd-line
 	 *****************/
