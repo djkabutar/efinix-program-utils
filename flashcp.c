@@ -82,9 +82,9 @@
 
 /* for tagging functions that always exit */
 #if defined(__GNUC__) || defined(__clang__)
-	#define NORETURN __attribute__((noreturn))
+#define NORETURN __attribute__((noreturn))
 #else
-	#define NORETURN
+#define NORETURN
 #endif
 
 static NORETURN void log_failure(const char *fmt, ...)
@@ -237,88 +237,95 @@ static void cleanup(void)
 		close(fil_fd);
 }
 
-static int gpio_set_value(const char *pin, const char *value)
+static int gpio_export(const char *pin)
 {
-	const char *gpio_path = "/sys/class/gpio";
 	const char *export = "/sys/class/gpio/export";
+
+	int fd = -1;
+
+	fd = safe_open(export, O_WRONLY);
+	if (fd < 0) {
+		log_failure("Failed to open %s\n", export);
+		return fd;
+	}
+	safe_write(fd, pin, 3, 0, 0, NULL);
+
+	close(fd);
+
+	return 0;
+}
+
+static int gpio_unexport(const char *pin)
+{
 	const char *unexport = "/sys/class/gpio/unexport";
-	const char *default_gpio = "/sys/class/gpio/gpio";
+
+	int fd = -1;
+
+	fd = safe_open(unexport, O_WRONLY);
+	if (fd < 0) {
+		log_failure("Failed to open %s\n", unexport);
+		return fd;
+	}
+	safe_write(fd, pin, 3, 0, 0, NULL);
+
+	close(fd);
+
+	return 0;
+}
+
+static int gpio_set_direction(const char *pin, const char *direction)
+{
 	int fd = -1;
 
 	char *gpio_direction;
-	gpio_direction = malloc(strlen(default_gpio) + 14);
-	strcpy(gpio_direction, default_gpio);
+	gpio_direction = malloc(strlen("/sys/class/gpio/gpio") + 14);
+	strcpy(gpio_direction, "/sys/class/gpio/gpio");
 	strcat(gpio_direction, pin);
 	strcat(gpio_direction, "/direction");
 
+	fd = safe_open(gpio_direction, O_WRONLY);
+	if (fd < 0) {
+		log_failure("Failed to open %s\n", gpio_direction);
+		return fd;
+	}
+	safe_write(fd, direction, 3, 0, 0, NULL);
+
+	close(fd);
+	free(gpio_direction);
+
+	return 0;
+}
+
+static void gpio_set_value(const char *pin, const char *value)
+{
+	const char *gpio_path = "/sys/class/gpio";
+	const char *default_gpio = "/sys/class/gpio/gpio";
 	char *gpio_value;
+	int ret = 0;
+
 	gpio_value = malloc(strlen(default_gpio) + 10);
 	strcpy(gpio_value, default_gpio);
 	strcat(gpio_value, pin);
 	strcat(gpio_value, "/value");
 
-	fd = open(export, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open gpio export\n");
-		goto err_export;
-	}
-
-	if (write(fd, pin, 3) != 3) {
-		printf("Error writing to Export\n");
-		goto err_export;
-	}
-
-	close(fd);
+	ret = gpio_export(pin);
+	if (ret)
+		goto err_gpio;
 
 	usleep(100000);
 
-	fd = open(gpio_direction, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", gpio_direction);
+	ret = gpio_set_direction(pin, "out");
+	if (ret)
 		goto err_gpio;
-	}
 
-	if (write(fd, "out", 3) != 3) {
-		printf("Error writing to %s\n", gpio_direction);
-		goto err_gpio;
-	}
+	ret = safe_open(gpio_value, O_WRONLY);
+	if (ret < 0)
+		log_failure("Failed to open %s\n", gpio_value);
 
-	close(fd);
-
-	fd = open(gpio_value, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", gpio_value);
-		goto err_gpio;
-	}
-
-	if (write(fd, value, 1) != 1)
-		printf("Error writing to %s\n", gpio_value);
+	safe_write(ret, value, 1, 0, 0, NULL);
 
 err_gpio:
-	free(gpio_direction);
 	free(gpio_value);
-	close(fd);
-
-	fd = open(unexport, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", unexport);
-		goto err_unexport;
-	}
-
-	if (write(fd, pin, 3) != 3) {
-		printf("Error writing to %s\n", unexport);
-		goto err_unexport;
-	}
-
-	close(fd);
-	return 0;
-
-err_unexport:
-err_export:
-	free(gpio_value);
-	free(gpio_direction);
-	close(fd);
-	return -1;
 }
 
 int main(int argc, char *argv[])
