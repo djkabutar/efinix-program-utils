@@ -29,294 +29,88 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define PROGRAM_NAME "flashcp"
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <mtd/mtd-user.h>
-#include <getopt.h>
-#include <sys/syscall.h>
-#include <errno.h>
-
-#include "common.h"
+#include "flashcp.h"
 #include "h2b.h"
+#include <getopt.h>
+#include <sys/stat.h>
 
 /* for debugging purposes only */
 #ifdef DEBUG
 #undef DEBUG
-#define DEBUG(fmt,args...) { fprintf (stderr,"%d: ",__LINE__); fprintf (stderr,fmt,## args); }
+#define DEBUG(fmt, args...)                        \
+	{                                          \
+		fprintf(stderr, "%d: ", __LINE__); \
+		fprintf(stderr, fmt, ##args);      \
+	}
 #else
 #undef DEBUG
-#define DEBUG(fmt,args...)
+#define DEBUG(fmt, args...)
 #endif
 
 #define KB(x) ((x) / 1024)
-#define PERCENTAGE(x,total) (((x) * 100) / (total))
-#define delete_module(module,flags) syscall(SYS_delete_module, module, flags)
+#define PERCENTAGE(x, total) (((x)*100) / (total))
+#define delete_module(name, flags) syscall(__NR_delete_module, name, flags)
 
 /* cmd-line flags */
-#define FLAG_NONE		0x00
-#define FLAG_HELP		0x02
-#define FLAG_FILENAME	0x04
-#define FLAG_DEVICE		0x08
-#define FLAG_ERASE_ALL	0x10
-#define FLAG_PARTITION	0x20
+#define FLAG_NONE 0x00
+#define FLAG_HELP 0x02
+#define FLAG_FILENAME 0x04
+#define FLAG_DEVICE 0x08
+#define FLAG_ERASE_ALL 0x10
+#define FLAG_PARTITION 0x20
 
-#define RESET_GPIO "509"
-#define CONDONE_GPIO "510"
-
-/* error levels */
-#define LOG_NORMAL	1
-#define LOG_ERROR	2
-
-static NORETURN void log_failure (const char *fmt, ...)
+static NORETURN void showusage(int error)
 {
-	va_list ap;
-	va_start (ap,fmt);
-	vfprintf (stderr,fmt,ap);
-	va_end (ap);
-	fflush (stderr);
+	fprintf(error ? stderr : stdout,
+		"\n"
+		"Flash Copy - Written by Abraham van der Merwe <abraham@2d3d.co.za>\n"
+		"\n"
+		"usage: %1$s [ -v | --verbose | -A | --erase-all ] <filename> <device>\n"
+		"       %1$s -h | --help\n"
+		"       %1$s -V | --version\n"
+		"\n"
+		"   -h | --help      Show this help message\n"
+		"   -v | --verbose   Show progress reports\n"
+		"   -p | --partition Only copy different block from file to device\n"
+		"   -A | --erase-all Erases the whole device regardless of the image size\n"
+		"   -V | --version   Show version information and exit\n"
+		"   <filename>       File which you want to copy to flash\n"
+		"   <device>         Flash device to write to (e.g. /dev/mtd0, /dev/mtd1, etc.)\n"
+		"\n",
+		PROGRAM_NAME);
 
-	exit (EXIT_FAILURE);
-}
-
-static int verbose = 0;
-static void log_verbose (const char *fmt, ...)
-{
-	va_list ap;
-
-	if (!verbose)
-		return;
-
-	va_start (ap,fmt);
-	vfprintf (stdout,fmt,ap);
-	va_end (ap);
-	fflush (stdout);
-}
-
-static NORETURN void showusage(bool error)
-{
-	fprintf (error ? stderr : stdout,
-			"\n"
-			"Flash Copy - Written by Abraham van der Merwe <abraham@2d3d.co.za>\n"
-			"\n"
-			"usage: %1$s [ -v | --verbose | -A | --erase-all ] <filename> <device>\n"
-			"       %1$s -h | --help\n"
-			"       %1$s -V | --version\n"
-			"\n"
-			"   -h | --help      Show this help message\n"
-			"   -v | --verbose   Show progress reports\n"
-			"   -p | --partition Only copy different block from file to device\n"
-			"   -A | --erase-all Erases the whole device regardless of the image size\n"
-			"   -V | --version   Show version information and exit\n"
-			"   <filename>       File which you want to copy to flash\n"
-			"   <device>         Flash device to write to (e.g. /dev/mtd0, /dev/mtd1, etc.)\n"
-			"\n",
-			PROGRAM_NAME);
-
-	exit (error ? EXIT_FAILURE : EXIT_SUCCESS);
-}
-
-static int safe_open (const char *pathname,int flags)
-{
-	const char *access = "unknown";
-	int fd;
-
-	if (!pathname)
-		log_failure("No filename specified\n");
-
-	fd = open (pathname,flags);
-	if (fd < 0)
-	{
-		if (flags & O_RDWR)
-			access = "read/write";
-		else if (flags & O_RDONLY)
-			access = "read";
-		else if (flags & O_WRONLY)
-			access = "write";
-
-		log_failure ("While trying to open %s for %s access: %m\n",pathname,access);
-	}
-
-	return (fd);
-}
-
-static void safe_read (int fd,const char *filename,void *buf,size_t count)
-{
-	ssize_t result;
-
-	result = read (fd,buf,count);
-	if (count != result)
-	{
-		log_verbose ("\n");
-		if (result < 0)
-		{
-			log_failure("While reading data from %s: %m\n",filename);
-		}
-		log_failure("Short read count returned while reading from %s\n",filename);
-	}
-}
-
-static void safe_write (int fd,const void *buf,size_t count,size_t written,unsigned long long to_write,const char *device)
-{
-	ssize_t result;
-
-	/* write to device */
-	result = write (fd,buf,count);
-	if (count != result)
-	{
-		log_verbose ("\n");
-		if (result < 0)
-		{
-			log_failure("While writing data to 0x%.8lx-0x%.8lx on %s: %m\n",
-					written,written + count,device);
-		}
-		log_failure("Short write count returned while writing to x%.8zx-0x%.8zx on %s: %zu/%llu bytes written to flash\n",
-				written,written + count,device,written + result,to_write);
-	}
-}
-
-static off_t safe_lseek (int fd,off_t offset,int whence,const char *filename)
-{
-	off_t off;
-
-	off = lseek (fd,offset,whence);
-	if (off < 0)
-	{
-		log_failure("While seeking on %s: %m\n",filename);
-	}
-
-	return off;
-}
-
-static void safe_rewind (int fd,const char *filename)
-{
-	safe_lseek(fd,0L,SEEK_SET,filename);
-}
-
-static void safe_memerase (int fd,const char *device,struct erase_info_user *erase)
-{
-	if (ioctl (fd,MEMERASE,erase) < 0)
-	{
-		log_verbose ("\n");
-		log_failure("While erasing blocks 0x%.8x-0x%.8x on %s: %m\n",
-				(unsigned int) erase->start,(unsigned int) (erase->start + erase->length),device);
-	}
+	exit(error ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /******************************************************************************/
 
-static int dev_fd = -1,fil_fd = -1;
+static int dev_fd = -1, fil_fd = -1;
 
-static void cleanup (void)
+static void cleanup(void)
 {
-	if (dev_fd > 0) close (dev_fd);
-	if (fil_fd > 0) close (fil_fd);
+	if (dev_fd > 0)
+		close(dev_fd);
+	if (fil_fd > 0)
+		close(fil_fd);
 }
 
-static int gpio_set_value(const char* pin, const char* value)
-{
-	const char* gpio_path = "/sys/class/gpio";
-	const char* export = "/sys/class/gpio/export";
-	const char* unexport = "/sys/class/gpio/unexport";
-	const char* default_gpio = "/sys/class/gpio/gpio";
-	int fd = -1;
-
-	char* gpio_direction;
-	gpio_direction = malloc(strlen(default_gpio) + 14);
-	strcpy(gpio_direction, default_gpio);
-	strcat(gpio_direction, pin);
-	strcat(gpio_direction, "/direction");
-
-	char* gpio_value;
-	gpio_value = malloc(strlen(default_gpio) + 10);
-	strcpy(gpio_value, default_gpio);
-	strcat(gpio_value, pin);
-	strcat(gpio_value, "/value");
-
-	fd = open(export, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open gpio export\n");
-		goto err_export;
-	}
-
-	if (write(fd, pin, 3) != 3) {
-		printf("Error writing to Export\n");
-		goto err_export;
-	}
-
-	close(fd);
-
-	usleep(100000);
-
-	fd = open(gpio_direction, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", gpio_direction);
-		goto err_gpio;
-	}
-
-	if (write(fd, "out", 3) != 3) {
-		printf("Error writing to %s\n", gpio_direction);
-		goto err_gpio;
-	}
-
-	close(fd);
-
-	fd = open(gpio_value, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", gpio_value);
-		goto err_gpio;
-	}
-
-	if (write(fd, value, 1) != 1)
-		printf("Error writing to %s\n", gpio_value);
-
-err_gpio:
-	free(gpio_direction);
-	free(gpio_value);
-	close(fd);
-
-	fd = open(unexport, O_WRONLY);
-	if (fd < 0) {
-		printf("Unable to open %s\n", unexport);
-		goto err_unexport;
-	}
-
-	if (write(fd, pin, 3) != 3) {
-		printf("Error writing to %s\n", unexport);
-		goto err_unexport;
-	}
-
-	close(fd);
-	return 0;
-
-err_unexport:
-err_export:
-	free(gpio_value);
-	free(gpio_direction);
-	close(fd);
-	return -1;
-}
-
-int main (int argc,char *argv[])
+int main(int argc, char *argv[])
 {
 	const char *filename = NULL, *device = "/dev/mtd0";
-	int i,flags = FLAG_NONE;
-	size_t size,written;
+	int i, flags = FLAG_NONE;
+	size_t size, written;
 	struct mtd_info_user mtd;
 	struct erase_info_user erase;
 	struct stat filestat;
-	unsigned char *src,*dest;
+	unsigned char *src, *dest;
 	int ret;
 	char *bin_filename = NULL;
 	char *env = getenv("USER");
+
+	if (env == NULL) {
+		log_failure("Not able to get USER env variable\n");
+		// exit(EXIT_FAILURE);
+	}
 
 	/*********************
 	 * parse cmd-line
@@ -350,50 +144,50 @@ int main (int argc,char *argv[])
 		int option_index = 0;
 		static const char *short_options = "hvpAV";
 		static const struct option long_options[] = {
-			{"help", no_argument, 0, 'h'},
-			{"verbose", no_argument, 0, 'v'},
-			{"partition", no_argument, 0, 'p'},
-			{"erase-all", no_argument, 0, 'A'},
-			{"version", no_argument, 0, 'V'},
-			{0, 0, 0, 0},
+			{ "help", no_argument, 0, 'h' },
+			{ "verbose", no_argument, 0, 'v' },
+			{ "partition", no_argument, 0, 'p' },
+			{ "erase-all", no_argument, 0, 'A' },
+			{ "version", no_argument, 0, 'V' },
+			{ 0, 0, 0, 0 },
 		};
 
-		int c = getopt_long(argc, argv, short_options,
-				long_options, &option_index);
+		int c = getopt_long(argc, argv, short_options, long_options,
+				    &option_index);
 		if (c == EOF) {
 			break;
 		}
 
 		switch (c) {
-			case 'h':
-				flags |= FLAG_HELP;
-				DEBUG("Got FLAG_HELP\n");
-				break;
-			case 'v':
-				verbose = 1;
-				DEBUG("Got FLAG_VERBOSE\n");
-				break;
-			case 'p':
-				flags |= FLAG_PARTITION;
-				DEBUG("Got FLAG_PARTITION");
-				break;
-			case 'A':
-				flags |= FLAG_ERASE_ALL;
-				DEBUG("Got FLAG_ERASE_ALL\n");
-				break;
-			case 'V':
-				common_print_version();
-				exit(EXIT_SUCCESS);
-				break;
-			default:
-				DEBUG("Unknown parameter: %s\n",argv[option_index]);
-				showusage(true);
+		case 'h':
+			flags |= FLAG_HELP;
+			DEBUG("Got FLAG_HELP\n");
+			break;
+		case 'v':
+			verbose = 1;
+			DEBUG("Got FLAG_VERBOSE\n");
+			break;
+		case 'p':
+			flags |= FLAG_PARTITION;
+			DEBUG("Got FLAG_PARTITION");
+			break;
+		case 'A':
+			flags |= FLAG_ERASE_ALL;
+			DEBUG("Got FLAG_ERASE_ALL\n");
+			break;
+		case 'V':
+			printf("%s: Version: %s\n", PROGRAM_NAME, VERSION);
+			exit(EXIT_SUCCESS);
+			break;
+		default:
+			DEBUG("Unknown parameter: %s\n", argv[option_index]);
+			showusage(1);
 		}
 	}
-	if (optind+1 == argc) {
+	if (optind + 1 == argc) {
 		flags |= FLAG_FILENAME;
 		filename = argv[optind];
-		DEBUG("Got filename: %s\n",filename);
+		DEBUG("Got filename: %s\n", filename);
 		bin_filename = malloc(strlen(filename) + 5);
 		strcpy(bin_filename, filename);
 		strcat(bin_filename, ".bin");
@@ -405,30 +199,32 @@ int main (int argc,char *argv[])
 		showusage(flags != FLAG_HELP);*/
 
 	if (flags & FLAG_PARTITION && flags & FLAG_ERASE_ALL)
-		log_failure("Option --partition does not support --erase-all\n");
+		log_failure(
+			"Option --partition does not support --erase-all\n");
 
-	atexit (cleanup);
+	atexit(cleanup);
 
 	ret = convert_to_bin(filename, bin_filename);
 	if (ret < 0)
 		log_failure("Convert to binary problem.\n");
 
 	/* get some info about the flash device */
-	dev_fd = safe_open (device,O_SYNC | O_RDWR);
-	if (ioctl (dev_fd,MEMGETINFO,&mtd) < 0)
-	{
+	dev_fd = safe_open(device, O_SYNC | O_RDWR);
+	if (ioctl(dev_fd, MEMGETINFO, &mtd) < 0) {
 		DEBUG("ioctl(): %m\n");
-		log_failure("This doesn't seem to be a valid MTD flash device!\n");
+		log_failure(
+			"This doesn't seem to be a valid MTD flash device!\n");
 	}
 
 	/* get some info about the file we want to copy */
-	fil_fd = safe_open (bin_filename,O_RDONLY);
-	if (fstat (fil_fd,&filestat) < 0)
-		log_failure("While trying to get the file status of %s: %m\n",bin_filename);
+	fil_fd = safe_open(bin_filename, O_RDONLY);
+	if (fstat(fil_fd, &filestat) < 0)
+		log_failure("While trying to get the file status of %s: %m\n",
+			    bin_filename);
 
 	/* does it fit into the device/partition? */
 	if (filestat.st_size > mtd.size)
-		log_failure("%s won't fit into %s!\n",bin_filename,device);
+		log_failure("%s won't fit into %s!\n", bin_filename, device);
 
 	src = malloc(mtd.erasesize);
 	if (!src)
@@ -439,8 +235,7 @@ int main (int argc,char *argv[])
 		log_failure("Malloc failed");
 
 	/* diff block flashcp */
-	if (flags & FLAG_PARTITION)
-	{
+	if (flags & FLAG_PARTITION) {
 		goto DIFF_BLOCKS;
 	}
 
@@ -452,103 +247,107 @@ int main (int argc,char *argv[])
 
 	erase.start = 0;
 
-	if (flags & FLAG_ERASE_ALL)
-	{
+	if (flags & FLAG_ERASE_ALL) {
 		erase.length = mtd.size;
-	}
-	else
-	{
-		erase.length = (filestat.st_size + mtd.erasesize - 1) / mtd.erasesize;
+	} else {
+		erase.length =
+			(filestat.st_size + mtd.erasesize - 1) / mtd.erasesize;
 		erase.length *= mtd.erasesize;
 	}
 
-	if (verbose)
-	{
+	if (verbose) {
 		/* if the user wants verbose output, erase 1 block at a time and show him/her what's going on */
 		int blocks = erase.length / mtd.erasesize;
 		erase.length = mtd.erasesize;
-		log_verbose ("Erasing blocks: 0/%d (0%%)",blocks);
-		for (i = 1; i <= blocks; i++)
-		{
-			log_verbose ("\rErasing blocks: %d/%d (%d%%)",i,blocks,PERCENTAGE (i,blocks));
-			safe_memerase(dev_fd,device,&erase);
+		log_verbose("Erasing blocks: 0/%d (0%%)", blocks);
+		for (i = 1; i <= blocks; i++) {
+			log_verbose("\rErasing blocks: %d/%d (%d%%)", i, blocks,
+				    PERCENTAGE(i, blocks));
+			safe_memerase(dev_fd, device, &erase);
 			erase.start += mtd.erasesize;
 		}
-		log_verbose ("\rErasing blocks: %d/%d (100%%)\n",blocks,blocks);
-	}
-	else
-	{
+		log_verbose("\rErasing blocks: %d/%d (100%%)\n", blocks,
+			    blocks);
+	} else {
 		/* if not, erase the whole chunk in one shot */
-		safe_memerase(dev_fd,device,&erase);
+		safe_memerase(dev_fd, device, &erase);
 	}
-	DEBUG("Erased %u / %luk bytes\n",erase.length,filestat.st_size);
+	DEBUG("Erased %u / %luk bytes\n", erase.length, filestat.st_size);
 
 	/**********************************
 	 * write the entire file to flash *
 	 **********************************/
 
-	log_verbose ("Writing data: 0k/%lluk (0%%)",KB ((unsigned long long)filestat.st_size));
+	log_verbose("Writing data: 0k/%lluk (0%%)",
+		    KB((unsigned long long)filestat.st_size));
 	size = filestat.st_size;
 	i = mtd.erasesize;
 	written = 0;
-	while (size)
-	{
-		if (size < mtd.erasesize) i = size;
-		log_verbose ("\rWriting data: %dk/%lluk (%llu%%)",
-				KB (written + i),
-				KB ((unsigned long long)filestat.st_size),
-				PERCENTAGE ((unsigned long long)written + i,(unsigned long long)filestat.st_size));
+	while (size) {
+		if (size < mtd.erasesize)
+			i = size;
+		log_verbose("\rWriting data: %dk/%lluk (%llu%%)",
+			    KB(written + i),
+			    KB((unsigned long long)filestat.st_size),
+			    PERCENTAGE((unsigned long long)written + i,
+				       (unsigned long long)filestat.st_size));
 
 		/* read from filename */
-		safe_read (fil_fd,bin_filename,src,i);
+		safe_read(fil_fd, bin_filename, src, i);
 
 		/* write to device */
-		safe_write(dev_fd,src,i,written,(unsigned long long)filestat.st_size,device);
+		safe_write(dev_fd, src, i, written,
+			   (unsigned long long)filestat.st_size, device);
 
 		written += i;
 		size -= i;
 	}
-	log_verbose ("\rWriting data: %lluk/%lluk (100%%)\n",
-			KB ((unsigned long long)filestat.st_size),
-			KB ((unsigned long long)filestat.st_size));
-	DEBUG("Wrote %d / %lluk bytes\n",written,(unsigned long long)filestat.st_size);
+	log_verbose("\rWriting data: %lluk/%lluk (100%%)\n",
+		    KB((unsigned long long)filestat.st_size),
+		    KB((unsigned long long)filestat.st_size));
+	DEBUG("Wrote %d / %lluk bytes\n", written,
+	      (unsigned long long)filestat.st_size);
 
 	/**********************************
 	 * verify that flash == file data *
 	 **********************************/
 
-	safe_rewind (fil_fd,bin_filename);
-	safe_rewind (dev_fd,device);
+	safe_rewind(fil_fd, bin_filename);
+	safe_rewind(dev_fd, device);
 	size = filestat.st_size;
 	i = mtd.erasesize;
 	written = 0;
-	log_verbose ("Verifying data: 0k/%lluk (0%%)",KB ((unsigned long long)filestat.st_size));
-	while (size)
-	{
-		if (size < mtd.erasesize) i = size;
-		log_verbose ("\rVerifying data: %luk/%lluk (%llu%%)",
-				KB (written + i),
-				KB ((unsigned long long)filestat.st_size),
-				PERCENTAGE ((unsigned long long)written + i,(unsigned long long)filestat.st_size));
+	log_verbose("Verifying data: 0k/%lluk (0%%)",
+		    KB((unsigned long long)filestat.st_size));
+	while (size) {
+		if (size < mtd.erasesize)
+			i = size;
+		log_verbose("\rVerifying data: %luk/%lluk (%llu%%)",
+			    KB(written + i),
+			    KB((unsigned long long)filestat.st_size),
+			    PERCENTAGE((unsigned long long)written + i,
+				       (unsigned long long)filestat.st_size));
 
 		/* read from filename */
-		safe_read (fil_fd,bin_filename,src,i);
+		safe_read(fil_fd, bin_filename, src, i);
 
 		/* read from device */
-		safe_read (dev_fd,device,dest,i);
+		safe_read(dev_fd, device, dest, i);
 
 		/* compare buffers */
-		if (memcmp (src,dest,i))
-			log_failure("File does not seem to match flash data. First mismatch at 0x%.8zx-0x%.8zx\n",
-					written,written + i);
+		if (memcmp(src, dest, i))
+			log_failure(
+				"File does not seem to match flash data. First mismatch at 0x%.8zx-0x%.8zx\n",
+				written, written + i);
 
 		written += i;
 		size -= i;
 	}
-	log_verbose ("\rVerifying data: %lluk/%lluk (100%%)\n",
-			KB ((unsigned long long)filestat.st_size),
-			KB ((unsigned long long)filestat.st_size));
-	DEBUG("Verified %d / %lluk bytes\n",written,(unsigned long long)filestat.st_size);
+	log_verbose("\rVerifying data: %lluk/%lluk (100%%)\n",
+		    KB((unsigned long long)filestat.st_size),
+		    KB((unsigned long long)filestat.st_size));
+	DEBUG("Verified %d / %lluk bytes\n", written,
+	      (unsigned long long)filestat.st_size);
 
 	// Cleanup device handler and file handler
 	cleanup();
@@ -568,14 +367,14 @@ int main (int argc,char *argv[])
 	gpio_set_value(CONDONE_GPIO, "1");
 	free(bin_filename);
 
-	exit (EXIT_SUCCESS);
+	exit(EXIT_SUCCESS);
 
 	/*********************************************
 	 * Copy different blocks from file to device *
 	 ********************************************/
 DIFF_BLOCKS:
-	safe_rewind (fil_fd,bin_filename);
-	safe_rewind (dev_fd,device);
+	safe_rewind(fil_fd, bin_filename);
+	safe_rewind(dev_fd, device);
 	size = filestat.st_size;
 	i = mtd.erasesize;
 	erase.start = 0;
@@ -587,39 +386,43 @@ DIFF_BLOCKS:
 	int blocks = erase.length / mtd.erasesize;
 	erase.length = mtd.erasesize;
 
-	log_verbose ("\rProcessing blocks: 0/%d (%d%%)", blocks, PERCENTAGE (0,blocks));
-	for (int s = 1; s <= blocks; s++)
-	{
-		if (size < mtd.erasesize) i = size;
-		log_verbose ("\rProcessing blocks: %d/%d (%d%%)", s, blocks, PERCENTAGE (s,blocks));
+	log_verbose("\rProcessing blocks: 0/%d (%d%%)", blocks,
+		    PERCENTAGE(0, blocks));
+	for (int s = 1; s <= blocks; s++) {
+		if (size < mtd.erasesize)
+			i = size;
+		log_verbose("\rProcessing blocks: %d/%d (%d%%)", s, blocks,
+			    PERCENTAGE(s, blocks));
 
 		/* read from filename */
-		safe_read (fil_fd,bin_filename,src,i);
+		safe_read(fil_fd, bin_filename, src, i);
 
 		/* read from device */
 		current_dev_block = safe_lseek(dev_fd, 0, SEEK_CUR, device);
-		safe_read (dev_fd,device,dest,i);
+		safe_read(dev_fd, device, dest, i);
 
 		/* compare buffers, if not the same, erase and write the block */
-		if (memcmp (src,dest,i))
-		{
+		if (memcmp(src, dest, i)) {
 			diffBlock++;
 			/* erase block */
 			safe_lseek(dev_fd, current_dev_block, SEEK_SET, device);
-			safe_memerase(dev_fd,device,&erase);
+			safe_memerase(dev_fd, device, &erase);
 
 			/* write to device */
 			safe_lseek(dev_fd, current_dev_block, SEEK_SET, device);
-			safe_write(dev_fd,src,i,written,(unsigned long long)filestat.st_size,device);
+			safe_write(dev_fd, src, i, written,
+				   (unsigned long long)filestat.st_size,
+				   device);
 
 			/* read from device */
 			safe_lseek(dev_fd, current_dev_block, SEEK_SET, device);
-			safe_read (dev_fd,device,dest,i);
+			safe_read(dev_fd, device, dest, i);
 
 			/* compare buffers for write success */
-			if (memcmp (src,dest,i))
-				log_failure("File does not seem to match flash data. First mismatch at 0x%.8zx-0x%.8zx\n",
-						written,written + i);
+			if (memcmp(src, dest, i))
+				log_failure(
+					"File does not seem to match flash data. First mismatch at 0x%.8zx-0x%.8zx\n",
+					written, written + i);
 		}
 
 		erase.start += i;
@@ -627,7 +430,7 @@ DIFF_BLOCKS:
 		size -= i;
 	}
 
-	log_verbose ("\ndiff blocks: %d\n", diffBlock);
+	log_verbose("\ndiff blocks: %d\n", diffBlock);
 
-	exit (EXIT_SUCCESS);
+	exit(EXIT_SUCCESS);
 }
