@@ -154,7 +154,6 @@ static int gpio_export(const char *pin)
 	}
 	write(fd, pin, 3);
 
-	log_verbose("Exported GPIO %s\n", pin);
 	close(fd);
 
 	return 0;
@@ -172,7 +171,6 @@ static int gpio_unexport(const char *pin)
 		return fd;
 	}
 
-	log_verbose("Unexporting GPIO %s\n", pin);
 	write(fd, pin, 3);
 
 	close(fd);
@@ -197,7 +195,6 @@ static int gpio_set_direction(const char *pin, const char *direction)
 	}
 	write(fd, direction, 3);
 
-	log_verbose("Set GPIO %s direction to %s\n", pin, direction);
 	close(fd);
 	free(gpio_direction);
 
@@ -217,14 +214,18 @@ static void gpio_set_value(const char *pin, const char *value)
 	strcat(gpio_value, "/value");
 
 	ret = gpio_export(pin);
-	if (ret)
-		goto err_gpio;
+	if (ret) {
+		log_verbose("Failed to export gpio %s\n", pin);
+		goto free_gpio;
+	}
 
 	usleep(100000);
 
 	ret = gpio_set_direction(pin, "out");
-	if (ret)
-		goto err_gpio;
+	if (ret) {
+		log_verbose("Failed to set gpio %s direction\n", pin);
+		goto free_gpio;
+	}
 
 	ret = safe_open(gpio_value, O_WRONLY);
 	if (ret < 0)
@@ -232,7 +233,6 @@ static void gpio_set_value(const char *pin, const char *value)
 
 	write(ret, value, 1);
 
-	log_verbose("Set GPIO %s value to %s\n", pin, value);
-err_gpio:
+free_gpio:
 	free(gpio_value);
 }
