@@ -191,6 +191,7 @@ static int gpio_set_direction(const char *pin, const char *direction)
 	fd = safe_open(gpio_direction, O_WRONLY);
 	if (fd < 0) {
 		log_failure("Failed to open %s\n", gpio_direction);
+		free(gpio_direction);
 		return fd;
 	}
 	write(fd, direction, 3);
