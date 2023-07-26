@@ -4,18 +4,12 @@
  * All rights reserved.
  */
 #include <stdio.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <getopt.h>
 
-#include "h2b.h"
-
-int convert_to_bin(const char* inp, const char* out)
+int convert_to_bin(const char *inp, const char *out)
 {
 	FILE *input;
 	FILE *output;
@@ -26,14 +20,13 @@ int convert_to_bin(const char* inp, const char* out)
 	uint8_t *array;
 	unsigned int i = 0;
 	unsigned int count = 0;
-	int length;
 	int ret = 0;
 	char c;
 	size_t elements_written;
 	data = malloc(sizeof(char) * 5);
 	array = malloc(sizeof(uint8_t) * 3560000);
 
-	if(!inp) {
+	if (!inp) {
 		printf("Specify filename!\n");
 		ret = -1;
 		goto err_input;
@@ -46,21 +39,13 @@ int convert_to_bin(const char* inp, const char* out)
 		goto err_input;
 	}
 
-	while(!feof(input))
-	{
+	while (!feof(input)) {
 		c = fgetc(input);
-		if(c == '\n')
-		{
+		if (c == '\n') {
 			count++;
 		}
 	}
-	fclose(input);
-
-	input = fopen(inp, "r");
-	if (input == NULL) {
-		printf("Unable to open %s\n", inp);
-		ret = -1;
-	}
+	fseek(input, 0, SEEK_SET);
 
 	output = fopen(out, "wb");
 	if (output == NULL) {
@@ -75,9 +60,10 @@ int convert_to_bin(const char* inp, const char* out)
 		if (nread != 3) {
 			printf("File is not properly formatted: %s\n", data);
 			ret = -1;
+			goto err_read;
 		}
 		data[strcspn(data, "\n")] = 0;
-		array[i] = (uint8_t) strtol(data, NULL, 16);
+		array[i] = (uint8_t)strtol(data, NULL, 16);
 		i++;
 	}
 
@@ -88,11 +74,12 @@ int convert_to_bin(const char* inp, const char* out)
 		ret = -1;
 	}
 
+err_read:
+	free(line);
 	fclose(output);
 err_output:
 	fclose(input);
 err_input:
-	free(line);
 	free(data);
 	free(array);
 
