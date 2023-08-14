@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
+#include <linux/version.h>
 #include <unistd.h>
 
 #define PROGRAM_NAME "flashcp"
@@ -178,11 +179,14 @@ static int gpio_unexport(const char *pin)
 	return 0;
 }
 
-static int gpio_set_direction(const char *pin, const char *direction)
+static void gpio_set_direction(const char *pin, const char *direction)
 {
 	int fd = -1;
+	char *gpio_direction = NULL;
 
-	char *gpio_direction;
+	if (access("/sys/class/gpio/gpio/direction", F_OK) == -1)
+		return;
+
 	gpio_direction = (char *)malloc(strlen("/sys/class/gpio/gpio") + 14);
 	strcpy(gpio_direction, "/sys/class/gpio/gpio");
 	strcat(gpio_direction, pin);
@@ -192,14 +196,12 @@ static int gpio_set_direction(const char *pin, const char *direction)
 	if (fd < 0) {
 		log_failure("Failed to open %s\n", gpio_direction);
 		free(gpio_direction);
-		return fd;
+		return;
 	}
 	write(fd, direction, 3);
 
 	close(fd);
 	free(gpio_direction);
-
-	return 0;
 }
 
 static void gpio_set_value(const char *pin, const char *value)
@@ -222,11 +224,7 @@ static void gpio_set_value(const char *pin, const char *value)
 
 	usleep(100000);
 
-	ret = gpio_set_direction(pin, "out");
-	if (ret) {
-		log_verbose("Failed to set gpio %s direction\n", pin);
-		goto free_gpio;
-	}
+	gpio_set_direction(pin, "out");
 
 	ret = safe_open(gpio_value, O_WRONLY);
 	if (ret < 0)
