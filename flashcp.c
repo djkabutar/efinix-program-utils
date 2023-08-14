@@ -107,37 +107,36 @@ int main(int argc, char *argv[])
 	char *bin_filename = NULL;
 	char *env = getenv("USER");
 
-	if (env == NULL) {
+	if (!env)
 		log_failure("Not able to get USER env variable\n");
-		// exit(EXIT_FAILURE);
-	}
 
 	/*********************
 	 * parse cmd-line
 	 *****************/
 
-	if (strcmp(env, "root") != 0) {
+	if (strncmp(env, "root", 4))
 		log_failure("Permission denied! Try to run it with sudo.\n");
-		// exit(EXIT_FAILURE);
-	}
 
-	gpio_set_value(RESET_GPIO, "0");
-	gpio_set_value(CONDONE_GPIO, "0");
+	flash_access_to_processor();
 
-	ret = system("lsmod | grep spi_rockchip");
-	if (ret == 0) {
+	ret = access(device, F_OK);
+	log_verbose("flashcp: %s: SPI access = %d\n", device, ret);
+	if (ret != -1) {
 		cleanup();
-		ret = delete_module("spi_rockchip", O_TRUNC);
-		if (ret != 0) {
+		if (delete_module("spi_rockchip", O_TRUNC))
 			log_failure("Not able to remove spi_rockchip module\n");
-			// exit(EXIT_FAILURE);
-		}
 	}
 
-	ret = system("modprobe spi_rockchip");
-	if (ret == -1) {
-		log_failure("Modprobe failed\n");
-		// exit(EXIT_FAILURE);
+	system("modprobe spi_rockchip");
+
+	// Loop until the module is loaded
+	while ((ret = access(device, F_OK)) != 0) {
+		flash_access_to_fpga();
+		sleep(2);
+		flash_access_to_processor();
+		system("modprobe spi_rockchip");
+		log_verbose("Load spi_rockchip module: %s\n",
+			    ret ? "unsuccessfull" : "successfull");
 	}
 
 	for (;;) {
@@ -355,16 +354,14 @@ int main(int argc, char *argv[])
 
 	ret = delete_module("spi_rockchip", O_TRUNC);
 	if (ret != 0) {
-		// printf("rmmod failed with return code: %d\n", ret);
+		log_verbose("rmmod failed with return code: %d\n", ret);
 		perror("rmmod failed with return code");
-		gpio_set_value(RESET_GPIO, "1");
-		gpio_set_value(CONDONE_GPIO, "1");
+		flash_access_to_fpga();
 		free(bin_filename);
 		exit(EXIT_FAILURE);
 	}
 
-	gpio_set_value(RESET_GPIO, "1");
-	gpio_set_value(CONDONE_GPIO, "1");
+	flash_access_to_fpga();
 	free(bin_filename);
 
 	exit(EXIT_SUCCESS);

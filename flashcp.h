@@ -245,3 +245,15 @@ static void gpio_set_value(const char *pin, const char *value)
 free_gpio:
 	free(gpio_value);
 }
+
+static void flash_access_to_processor(void)
+{
+	gpio_set_value(RESET_GPIO, "0");
+	gpio_set_value(CONDONE_GPIO, "0");
+}
+
+static void flash_access_to_fpga(void)
+{
+	gpio_set_value(RESET_GPIO, "1");
+	gpio_set_value(CONDONE_GPIO, "1");
+}
