@@ -184,23 +184,28 @@ static void gpio_set_direction(const char *pin, const char *direction)
 	int fd = -1;
 	char *gpio_direction = NULL;
 
-	if (access("/sys/class/gpio/gpio/direction", F_OK) == -1)
-		return;
+	// 64 is enough for "/sys/class/gpio/gpioXXX/direction"
+	gpio_direction = (char *)malloc(64);
+	if (!gpio_direction)
+		log_failure("Failed to allocate memory for gpio_direction\n");
 
-	gpio_direction = (char *)malloc(strlen("/sys/class/gpio/gpio") + 14);
 	strcpy(gpio_direction, "/sys/class/gpio/gpio");
 	strcat(gpio_direction, pin);
 	strcat(gpio_direction, "/direction");
 
+	if (access(gpio_direction, F_OK) == -1)
+		goto free_gpio;
+
 	fd = safe_open(gpio_direction, O_WRONLY);
 	if (fd < 0) {
-		log_failure("Failed to open %s\n", gpio_direction);
 		free(gpio_direction);
-		return;
+		log_failure("Failed to open %s\n", gpio_direction);
 	}
+
 	write(fd, direction, 3);
 
 	close(fd);
+free_gpio:
 	free(gpio_direction);
 }
 
@@ -209,9 +214,13 @@ static void gpio_set_value(const char *pin, const char *value)
 	const char *gpio_path = "/sys/class/gpio";
 	const char *default_gpio = "/sys/class/gpio/gpio";
 	char *gpio_value;
-	int ret = 0;
+	int ret = 0, fd = -1;
 
-	gpio_value = (char *)malloc(strlen(default_gpio) + 10);
+	// 64 is enough for "/sys/class/gpio/gpioXXX/value"
+	gpio_value = (char *)malloc(64);
+	if (!gpio_value)
+		log_failure("Failed to allocate memory for gpio_value\n");
+
 	strcpy(gpio_value, default_gpio);
 	strcat(gpio_value, pin);
 	strcat(gpio_value, "/value");
@@ -222,16 +231,17 @@ static void gpio_set_value(const char *pin, const char *value)
 		goto free_gpio;
 	}
 
-	usleep(100000);
-
 	gpio_set_direction(pin, "out");
 
-	ret = safe_open(gpio_value, O_WRONLY);
-	if (ret < 0)
+	fd = safe_open(gpio_value, O_WRONLY);
+	if (fd < 0) {
+		free(gpio_value);
 		log_failure("Failed to open %s\n", gpio_value);
+	}
 
-	write(ret, value, 1);
+	write(fd, value, 1);
 
+	close(fd);
 free_gpio:
 	free(gpio_value);
 }
