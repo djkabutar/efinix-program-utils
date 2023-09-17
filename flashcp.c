@@ -59,27 +59,21 @@
 #define FLAG_ERASE_ALL 0x10
 #define FLAG_PARTITION 0x20
 
-static NORETURN void showusage(int error)
-{
-	fprintf(error ? stderr : stdout,
-		"\n"
-		"Flash Copy - Written by Abraham van der Merwe <abraham@2d3d.co.za>\n"
-		"\n"
-		"usage: %1$s [ -v | --verbose | -A | --erase-all ] <filename> <device>\n"
-		"       %1$s -h | --help\n"
-		"       %1$s -V | --version\n"
-		"\n"
-		"   -h | --help      Show this help message\n"
-		"   -v | --verbose   Show progress reports\n"
-		"   -p | --partition Only copy different block from file to device\n"
-		"   -A | --erase-all Erases the whole device regardless of the image size\n"
-		"   -V | --version   Show version information and exit\n"
-		"   <filename>       File which you want to copy to flash\n"
-		"   <device>         Flash device to write to (e.g. /dev/mtd0, /dev/mtd1, etc.)\n"
-		"\n",
-		PROGRAM_NAME);
-
-	exit(error ? EXIT_FAILURE : EXIT_SUCCESS);
+static void show_usage() {
+    printf("Usage: %s [OPTIONS] [FILE]\n", PROGRAM_NAME);
+    printf("Copy data to an MTD flash device.\n");
+    printf("\nOptions:\n");
+    printf("  -h, --help           Show this help message and exit.\n");
+    printf("  -v, --verbose        Enable verbose mode.\n");
+    printf("  -p, --partition      Copy to a specific partition.\n");
+    printf("  -A, --erase-all      Erase the entire device before copying.\n");
+    printf("  -V, --version        Display the program version.\n");
+    printf("\nArguments:\n");
+    printf("  FILE                 The input file to copy to the flash device.\n");
+    printf("\nExamples:\n");
+    printf("  %s -p input.bin     Copy input.bin to the flash partition.\n", PROGRAM_NAME);
+    printf("  %s -A firmware.bin  Copy and erase firmware.bin to the entire device.\n", PROGRAM_NAME);
+    printf("\n");
 }
 
 /******************************************************************************/
@@ -180,7 +174,7 @@ int main(int argc, char *argv[])
 			break;
 		default:
 			DEBUG("Unknown parameter: %s\n", argv[option_index]);
-			showusage(1);
+			show_usage();
 		}
 	}
 	if (optind + 1 == argc) {
@@ -194,8 +188,8 @@ int main(int argc, char *argv[])
 		flags |= FLAG_DEVICE;
 	}
 
-	/*if (flags & FLAG_HELP || device == NULL)
-		showusage(flags != FLAG_HELP);*/
+	if (flags & FLAG_HELP || device == NULL)
+			show_usage();
 
 	if (flags & FLAG_PARTITION && flags & FLAG_ERASE_ALL)
 		log_failure(
