@@ -51,7 +51,7 @@
 
 #define KB(x) ((x) / 1024)
 #define PERCENTAGE(x, total) (((x)*100) / (total))
-#define delete_module(name, flags) syscall(__NR_delete_module, name, flags)
+#define DELETE_MODULE(name, flags) syscall(__NR_delete_module, name, flags)
 
 /* cmd-line flags */
 #define FLAG_NONE 0x00
@@ -61,21 +61,24 @@
 #define FLAG_ERASE_ALL 0x10
 #define FLAG_PARTITION 0x20
 
-static void show_usage() {
-    printf("Usage: %s [OPTIONS] [FILE]\n", PROGRAM_NAME);
-    printf("Copy data to an MTD flash device.\n");
-    printf("\nOptions:\n");
-    printf("  -h, --help           Show this help message and exit.\n");
-    printf("  -v, --verbose        Enable verbose mode.\n");
-    printf("  -p, --partition      Copy to a specific partition.\n");
-    printf("  -A, --erase-all      Erase the entire device before copying.\n");
-    printf("  -V, --version        Display the program version.\n");
-    printf("\nArguments:\n");
-    printf("  FILE                 The input file to copy to the flash device.\n");
-    printf("\nExamples:\n");
-    printf("  %s -p input.bin     Copy input.bin to the flash partition.\n", PROGRAM_NAME);
-    printf("  %s -A firmware.bin  Copy and erase firmware.bin to the entire device.\n", PROGRAM_NAME);
-    printf("\n");
+static void show_usage()
+{
+	printf("Usage: %s [OPTIONS] [FILE]\n", PROGRAM_NAME);
+	printf("Copy data to an MTD flash device.\n");
+	printf("\nOptions:\n");
+	printf("  -h, --help           Show this help message and exit.\n");
+	printf("  -v, --verbose        Enable verbose mode.\n");
+	printf("  -p, --partition      Copy to a specific partition.\n");
+	printf("  -A, --erase-all      Erase the entire device before copying.\n");
+	printf("  -V, --version        Display the program version.\n");
+	printf("\nArguments:\n");
+	printf("  FILE                 The input file to copy to the flash device.\n");
+	printf("\nExamples:\n");
+	printf("  %s -p input.bin     Copy input.bin to the flash partition.\n",
+	       PROGRAM_NAME);
+	printf("  %s -A firmware.bin  Copy and erase firmware.bin to the entire device.\n",
+	       PROGRAM_NAME);
+	printf("\n");
 }
 
 /******************************************************************************/
@@ -90,6 +93,62 @@ static void cleanup(void)
 		close(fil_fd);
 }
 
+/**
+ * @brief Configure the SPI flash access for writing to an MTD device.
+ *
+ * This function prepares the system for writing to an MTD flash device by
+ * ensuring the necessary permissions, loading the required kernel module,
+ * and toggling the SPI flash access between the processor and FPGA if needed.
+ *
+ * @param device The path to the MTD device file (e.g., "/dev/mtd0").
+ * @return 0 if the configuration is successful, -1 if an error occurs.
+ */
+int vicharak_flash_configuration(const char *device)
+{
+	int ret = 0;
+	char *env = getenv("USER");
+
+	// Check if the USER environment variable is set
+	if (!env)
+		log_failure("Not able to get USER env variable\n");
+
+	// Check if the user has root privileges (requires sudo)
+	if (strncmp(env, "root", 4))
+		log_failure("Permission denied! Try to run it with sudo.\n");
+
+	// Ensure that flash access is granted to the processor
+	flash_access_to_processor();
+
+	// Check if the MTD device file exists (SPI flash access)
+	ret = access(device, F_OK);
+	if (ret != -1) {
+		// If the MTD device file exists, attempt to remove the
+		// spi_rockchip module
+		cleanup();
+		if (DELETE_MODULE("spi_rockchip", O_TRUNC))
+			log_failure("Not able to remove spi_rockchip module\n");
+	}
+
+	// Load the spi_rockchip module
+	system("modprobe spi_rockchip");
+
+	// Continuously attempt to load the module until successful
+	while ((ret = access(device, F_OK)) != 0) {
+		// Toggling the SPI flash access between the processor and FPGA
+		flash_access_to_fpga();
+		sleep(2);
+		flash_access_to_processor();
+
+		// Load the spi_rockchip module
+		system("modprobe spi_rockchip");
+
+		log_verbose("Load spi_rockchip module: %s\n",
+			    ret ? "unsuccessfull" : "successfull");
+	}
+
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	const char *filename = NULL, *device = "/dev/mtd0";
@@ -101,40 +160,10 @@ int main(int argc, char *argv[])
 	unsigned char *src, *dest;
 	int ret;
 	char *bin_filename = NULL;
-	char *env = getenv("USER");
-
-	if (!env)
-		log_failure("Not able to get USER env variable\n");
 
 	/*********************
 	 * parse cmd-line
 	 *****************/
-
-	if (strncmp(env, "root", 4))
-		log_failure("Permission denied! Try to run it with sudo.\n");
-
-	flash_access_to_processor();
-
-	ret = access(device, F_OK);
-	log_verbose("flashcp: %s: SPI access = %d\n", device, ret);
-	if (ret != -1) {
-		cleanup();
-		if (delete_module("spi_rockchip", O_TRUNC))
-			log_failure("Not able to remove spi_rockchip module\n");
-	}
-
-	system("modprobe spi_rockchip");
-
-	// Loop until the module is loaded
-	while ((ret = access(device, F_OK)) != 0) {
-		flash_access_to_fpga();
-		sleep(2);
-		flash_access_to_processor();
-		system("modprobe spi_rockchip");
-		log_verbose("Load spi_rockchip module: %s\n",
-			    ret ? "unsuccessfull" : "successfull");
-	}
-
 	for (;;) {
 		int option_index = 0;
 		static const char *short_options = "hvpAV";
@@ -180,28 +209,34 @@ int main(int argc, char *argv[])
 		}
 	}
 	if (optind + 1 == argc) {
+		ret = vicharak_flash_configuration(device);
+		if (ret < 0)
+			log_failure("vicharak_flash_configuration failed\n");
+
 		flags |= FLAG_FILENAME;
 		filename = argv[optind];
 		DEBUG("Got filename: %s\n", filename);
 		bin_filename = malloc(strlen(filename) + 5);
-		strcpy(bin_filename, filename);
-		strcat(bin_filename, ".bin");
+		snprintf(bin_filename, strlen(filename) + 5, "%s.bin",
+			 filename);
 
 		flags |= FLAG_DEVICE;
 	}
 
 	if (flags & FLAG_HELP || device == NULL)
-			show_usage();
-
+		show_usage();
 	if (flags & FLAG_PARTITION && flags & FLAG_ERASE_ALL)
 		log_failure(
 			"Option --partition does not support --erase-all\n");
 
 	atexit(cleanup);
 
-	ret = convert_to_bin(filename, bin_filename);
-	if (ret < 0)
-		log_failure("Convert to binary problem.\n");
+	// Convert the provided hexfile to binary
+	if (flags & FLAG_FILENAME) {
+		ret = convert_to_bin(filename, bin_filename);
+		if (ret < 0)
+			log_failure("Convert to binary problem.\n");
+	}
 
 	/* get some info about the flash device */
 	dev_fd = safe_open(device, O_SYNC | O_RDWR);
@@ -348,16 +383,15 @@ int main(int argc, char *argv[])
 	cleanup();
 	usleep(10000);
 
-	ret = delete_module("spi_rockchip", O_TRUNC);
-	if (ret != 0) {
+	// Remove the spi_rockchip module
+	ret = DELETE_MODULE("spi_rockchip", O_TRUNC);
+	if (ret != 0)
 		log_verbose("rmmod failed with return code: %d\n", ret);
-		perror("rmmod failed with return code");
-		flash_access_to_fpga();
-		free(bin_filename);
-		exit(EXIT_FAILURE);
-	}
 
+	// Toggle the SPI flash access to the FPGA
 	flash_access_to_fpga();
+
+	// Free memory allocated to the file
 	free(bin_filename);
 
 	exit(EXIT_SUCCESS);
