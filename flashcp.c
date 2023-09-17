@@ -3,7 +3,9 @@
  * Written by Abraham vd Merwe <abraham@2d3d.co.za>
  * All rights reserved.
  *
- * Renamed to flashcp.c to avoid conflicts with fcp from fsh package
+ * Copyright (c) 2023 Vicharak Computer LLP.
+ * Refactored by UtsavBalar1231 <utsavbalar1231@gmail.com> and
+ * djkabutar <d.kabutarwala@yahoo.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
