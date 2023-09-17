@@ -148,12 +148,14 @@ static int gpio_export(const char *pin)
 
 	int fd = -1;
 
-	fd = safe_open(exp, O_WRONLY);
+	fd = open(exp, O_WRONLY);
 	if (fd < 0) {
-		log_failure("Failed to open %s\n", exp);
+		log_verbose("Failed to open %s\n", exp);
 		return fd;
 	}
-	write(fd, pin, 3);
+
+	if (write(fd, pin, strlen(pin)) == -1)
+        log_verbose("Failed to export pin %s to %s\n", pin, exp);
 
 	close(fd);
 
@@ -166,13 +168,14 @@ static int gpio_unexport(const char *pin)
 
 	int fd = -1;
 
-	fd = safe_open(unexport, O_WRONLY);
+	fd = open(unexport, O_WRONLY);
 	if (fd < 0) {
-		log_failure("Failed to open %s\n", unexport);
+		log_verbose("Failed to open %s\n", unexport);
 		return fd;
 	}
 
-	write(fd, pin, 3);
+	if (write(fd, pin, strlen(pin)) == -1)
+        log_failure("Failed to unexport pin %s\n", pin);
 
 	close(fd);
 
