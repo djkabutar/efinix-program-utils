@@ -155,7 +155,7 @@ static int gpio_export(const char *pin)
 	}
 
 	if (write(fd, pin, strlen(pin)) == -1)
-        log_verbose("Failed to export pin %s to %s\n", pin, exp);
+		log_verbose("Failed to export pin %s to %s\n", pin, exp);
 
 	close(fd);
 
@@ -175,7 +175,7 @@ static int gpio_unexport(const char *pin)
 	}
 
 	if (write(fd, pin, strlen(pin)) == -1)
-        log_failure("Failed to unexport pin %s\n", pin);
+		log_failure("Failed to unexport pin %s\n", pin);
 
 	close(fd);
 
@@ -221,33 +221,32 @@ static void gpio_set_value(const char *pin, const char *value)
 {
 	const char *gpio_path = "/sys/class/gpio";
 	const char *default_gpio = "/sys/class/gpio/gpio";
-	char *gpio_value;
+	char *gpio_value = NULL;
+	size_t gpio_value_len;
 	int ret = 0, fd = -1;
 
-	// 64 is enough for "/sys/class/gpio/gpioXXX/value"
-	gpio_value = (char *)malloc(64);
+	// Calculate the required length for gpio_value
+	gpio_value_len =
+		strlen(default_gpio) + strlen(pin) + strlen("/value") + 1;
+
+	gpio_value = (char *)malloc(gpio_value_len);
 	if (!gpio_value)
 		log_failure("Failed to allocate memory for gpio_value\n");
 
-	strcpy(gpio_value, default_gpio);
-	strcat(gpio_value, pin);
-	strcat(gpio_value, "/value");
+	snprintf(gpio_value, gpio_value_len, "%s%s/value", default_gpio, pin);
 
 	ret = gpio_export(pin);
-	if (ret) {
-		log_verbose("Failed to export gpio %s\n", pin);
+	if (ret)
 		goto free_gpio;
-	}
 
 	gpio_set_direction(pin, "out");
 
-	fd = safe_open(gpio_value, O_WRONLY);
-	if (fd < 0) {
-		free(gpio_value);
-		log_failure("Failed to open %s\n", gpio_value);
-	}
+	fd = open(gpio_value, O_WRONLY);
+	if (fd < 0)
+		goto free_gpio;
 
-	write(fd, value, 1);
+	if (write(fd, value, 1) == -1)
+		log_verbose("Failed to write value to %s\n", gpio_value);
 
 	close(fd);
 free_gpio:
