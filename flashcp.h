@@ -183,26 +183,31 @@ static void gpio_set_direction(const char *pin, const char *direction)
 {
 	int fd = -1;
 	char *gpio_direction = NULL;
+	size_t gpio_direction_len;
 
-	// 64 is enough for "/sys/class/gpio/gpioXXX/direction"
-	gpio_direction = (char *)malloc(64);
+	// Calculate the required length for gpio_direction
+	gpio_direction_len = strlen("/sys/class/gpio/gpio") + strlen(pin) +
+			     strlen("/direction") + 1;
+
+	gpio_direction = (char *)malloc(gpio_direction_len);
 	if (!gpio_direction)
 		log_failure("Failed to allocate memory for gpio_direction\n");
 
-	strcpy(gpio_direction, "/sys/class/gpio/gpio");
-	strcat(gpio_direction, pin);
-	strcat(gpio_direction, "/direction");
+	snprintf(gpio_direction, gpio_direction_len,
+		 "/sys/class/gpio/gpio%s/direction", pin);
 
 	if (access(gpio_direction, F_OK) == -1)
 		goto free_gpio;
 
-	fd = safe_open(gpio_direction, O_WRONLY);
+	fd = open(gpio_direction, O_WRONLY);
 	if (fd < 0) {
 		free(gpio_direction);
 		log_failure("Failed to open %s\n", gpio_direction);
 	}
 
-	write(fd, direction, 3);
+	if (write(fd, direction, strlen(direction)) == -1)
+		log_verbose("Failed to write direction to %s\n",
+			    gpio_direction);
 
 	close(fd);
 free_gpio:
