@@ -3,6 +3,7 @@
  */
 
 #include "flashcp.h"
+#include <stdio.h>
 
 NORETURN void log_failure(const char *fmt, ...)
 {
@@ -70,7 +71,7 @@ void safe_read(int fd, const char *filename, void *buf, size_t count)
 	ssize_t result;
 
 	result = read(fd, buf, count);
-	if (count != result) {
+	if ((ssize_t)count != result) {
 		log_verbose("\n");
 		if (result < 0) {
 			log_failure("While reading data from %s: %m\n",
@@ -88,7 +89,7 @@ void safe_write(int fd, const void *buf, size_t count, size_t written,
 
 	/* write to device */
 	result = write(fd, buf, count);
-	if (count != result) {
+	if ((ssize_t)count != result) {
 		log_verbose("\n");
 		if (result < 0) {
 			log_failure(
