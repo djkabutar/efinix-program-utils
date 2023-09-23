@@ -208,7 +208,6 @@ free_gpio:
 
 void gpio_set_value(const char *pin, const char *value)
 {
-	const char *gpio_path = "/sys/class/gpio";
 	const char *default_gpio = "/sys/class/gpio/gpio";
 	char *gpio_value = NULL;
 	size_t gpio_value_len;
