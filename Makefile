@@ -1,7 +1,7 @@
 CC := clang
 CFLAGS := -Wall -Wextra
 
-SRC := flashcp.c h2b.c
+SRC := main.c flashcp.c h2b.c
 
 all: fcp
 
