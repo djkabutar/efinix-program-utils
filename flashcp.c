@@ -232,12 +232,15 @@ void gpio_set_value(const char *pin, const char *value)
 
 	fd = open(gpio_value, O_WRONLY);
 	if (fd < 0)
-		goto free_gpio;
+		goto unexport_gpio;
 
 	if (write(fd, value, 1) == -1)
 		log_verbose("Failed to write value to %s\n", gpio_value);
 
 	close(fd);
+
+unexport_gpio:
+	gpio_unexport(pin);
 free_gpio:
 	free(gpio_value);
 }
