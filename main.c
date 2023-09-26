@@ -94,8 +94,37 @@ static void cleanup(void)
 		close(fil_fd);
 }
 
+
 /**
- * @brief Configure the SPI flash access for writing to an MTD device.
+ * @brief Check if a kernel module is loaded.
+ *
+ * @param module_name The name of the kernel module to check.
+ * @return 1 if the module is loaded, 0 if not.
+ */
+int is_module_loaded(const char *module_name) {
+    FILE *fp;
+    char buffer[256];
+    int loaded = 0;
+
+    // Run 'lsmod' and check if the module is listed
+    fp = popen("lsmod", "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        if (strstr(buffer, module_name) != NULL) {
+            loaded = 1;
+            break;
+        }
+    }
+
+    pclose(fp);
+    return loaded;
+}
+
+/**
+ * @brief Configure the SPI flash access for writing to an MTD device with retries.
  *
  * This function prepares the system for writing to an MTD flash device by
  * ensuring the necessary permissions, loading the required kernel module,
@@ -104,50 +133,41 @@ static void cleanup(void)
  * @param device The path to the MTD device file (e.g., "/dev/mtd0").
  * @return 0 if the configuration is successful, -1 if an error occurs.
  */
-int vicharak_flash_configuration(const char *device)
-{
-	int ret = 0;
-	char *env = getenv("USER");
+int vicharak_flash_configuration(const char *device) {
+	const int max_retries = 10;
 
-	// Check if the USER environment variable is set
-	if (!env)
-		log_failure("Not able to get USER env variable\n");
+    // Check if the user has root privileges (requires sudo)
+    if (geteuid() != 0) {
+        log_verbose("Please run this program with sudo.\n");
+        return -1;
+    }
 
-	// Check if the user has root privileges (requires sudo)
-	if (strncmp(env, "root", 4))
-		log_failure("Permission denied! Try to run it with sudo.\n");
+    int retries = 0;
 
-	// Ensure that flash access is granted to the processor
-	flash_access_to_processor();
+    while (retries < max_retries) {
+        int ret = access(device, F_OK);
 
-	// Check if the MTD device file exists (SPI flash access)
-	ret = access(device, F_OK);
-	if (ret != -1) {
-		// If the MTD device file exists, attempt to remove the
-		// spi_rockchip module
-		cleanup();
-		if (DELETE_MODULE("spi_rockchip", O_TRUNC))
-			log_failure("Not able to remove spi_rockchip module\n");
-	}
+        if (ret == 0) {
+            // MTD device file exists
+            return 0;
+        } else {
+            // Ensure that flash access is granted to the processor
+            flash_access_to_processor();
 
-	// Load the spi_rockchip module
-	system("modprobe spi_rockchip");
+            // Attempt to remove the spi_rockchip module
+			if (is_module_loaded("spi_rockchip"))
+				DELETE_MODULE("spi_rockchip", O_TRUNC);
 
-	// Continuously attempt to load the module until successful
-	while ((ret = access(device, F_OK)) != 0) {
-		// Toggling the SPI flash access between the processor and FPGA
-		flash_access_to_fpga();
-		sleep(2);
-		flash_access_to_processor();
+            // Load the spi_rockchip module
+            system("modprobe spi_rockchip");
 
-		// Load the spi_rockchip module
-		system("modprobe spi_rockchip");
+            sleep(1);
 
-		log_verbose("Load spi_rockchip module: %s\n",
-			    ret ? "unsuccessfull" : "successfull");
-	}
+            retries++;
+        }
+    }
 
-	return ret;
+    log_failure("Flash configuration failed after %d retries.\n", max_retries);
 }
 
 int main(int argc, char *argv[])
