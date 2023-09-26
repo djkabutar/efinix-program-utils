@@ -135,8 +135,21 @@ void safe_memerase(int fd, const char *device,
 int gpio_export(const char *pin)
 {
 	const char *exp = "/sys/class/gpio/export";
-
+	char *gpio_pin = NULL;
+	size_t gpio_pin_len;
 	int fd = -1;
+
+	// Calculate the required length for gpio_pin
+	gpio_pin_len = strlen("/sys/class/gpio/gpio") + strlen(pin) + 1;
+
+	gpio_pin = (char *)malloc(gpio_pin_len);
+
+	snprintf(gpio_pin, gpio_pin_len,
+		 "/sys/class/gpio/gpio%s", pin);
+
+	// If pin is already exported, return
+	if (!access(gpio_pin, F_OK))
+		goto exit;
 
 	fd = open(exp, O_WRONLY);
 	if (fd < 0) {
@@ -149,6 +162,7 @@ int gpio_export(const char *pin)
 
 	close(fd);
 
+exit:
 	return 0;
 }
 
