@@ -214,6 +214,12 @@ int main(int argc, char *argv[])
 			show_usage();
 		}
 	}
+
+	if (flags & FLAG_HELP || device == NULL) {
+		show_usage();
+		exit(EXIT_SUCCESS);
+	}
+
 	if (optind + 1 == argc) {
 		ret = vicharak_flash_configuration(device);
 		if (ret < 0)
@@ -229,8 +235,6 @@ int main(int argc, char *argv[])
 		flags |= FLAG_DEVICE;
 	}
 
-	if (flags & FLAG_HELP || device == NULL)
-		show_usage();
 	if (flags & FLAG_PARTITION && flags & FLAG_ERASE_ALL)
 		log_failure(
 			"Option --partition does not support --erase-all\n");
