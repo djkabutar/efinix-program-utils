@@ -66,17 +66,18 @@ static void show_usage()
 	printf("Usage: %s [OPTIONS] [FILE]\n", PROGRAM_NAME);
 	printf("Copy data to an MTD flash device.\n");
 	printf("\nOptions:\n");
-	printf("  -h, --help           Show this help message and exit.\n");
-	printf("  -v, --verbose        Enable verbose mode.\n");
-	printf("  -p, --partition      Copy to a specific partition.\n");
-	printf("  -A, --erase-all      Erase the entire device before copying.\n");
-	printf("  -V, --version        Display the program version.\n");
+	printf("  -h, --help            Show this help message and exit.\n");
+	printf("  -v, --verbose         Enable verbose mode.\n");
+	printf("  -p, --partition       Copy to a specific partition.\n");
+	printf("  -A, --erase-all       Erase the entire device before copying.\n");
+	printf("  -V, --version         Display the program version.\n");
+	printf("  -r, --read_from_flash Give flash access to FPGA.\n");
 	printf("\nArguments:\n");
-	printf("  FILE                 The input file to copy to the flash device.\n");
+	printf("  FILE                  The input file to copy to the flash device.\n");
 	printf("\nExamples:\n");
-	printf("  %s -p input.bin     Copy input.bin to the flash partition.\n",
+	printf("  %s -p input.bin       Copy input.bin to the flash partition.\n",
 	       PROGRAM_NAME);
-	printf("  %s -A firmware.bin  Copy and erase firmware.bin to the entire device.\n",
+	printf("  %s -A firmware.bin    Copy and erase firmware.bin to the entire device.\n",
 	       PROGRAM_NAME);
 	printf("\n");
 }
