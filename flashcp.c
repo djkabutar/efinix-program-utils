@@ -169,8 +169,21 @@ exit:
 int gpio_unexport(const char *pin)
 {
 	const char *unexport = "/sys/class/gpio/unexport";
-
+	char *gpio_pin = NULL;
+	size_t gpio_pin_len;
 	int fd = -1;
+
+	// Calculate the required length for gpio_pin
+	gpio_pin_len = strlen("/sys/class/gpio/gpio") + strlen(pin) + 1;
+
+	gpio_pin = (char *)malloc(gpio_pin_len);
+
+	snprintf(gpio_pin, gpio_pin_len,
+		 "/sys/class/gpio/gpio%s", pin);
+
+	// If pin is already unexported, return
+	if (access(gpio_pin, F_OK) == -1)
+		goto exit;
 
 	fd = open(unexport, O_WRONLY);
 	if (fd < 0) {
@@ -183,6 +196,7 @@ int gpio_unexport(const char *pin)
 
 	close(fd);
 
+exit:
 	return 0;
 }
 
