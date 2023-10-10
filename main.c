@@ -72,6 +72,7 @@ static void show_usage()
 	printf("  -A, --erase-all       Erase the entire device before copying.\n");
 	printf("  -V, --version         Display the program version.\n");
 	printf("  -r, --read_from_flash Give flash access to FPGA.\n");
+	printf("  -e, --external_cable  Program FPGA from the external cable.\n");
 	printf("\nArguments:\n");
 	printf("  FILE                  The input file to copy to the flash device.\n");
 	printf("\nExamples:\n");
@@ -187,7 +188,7 @@ int main(int argc, char *argv[])
 	 *****************/
 	for (;;) {
 		int option_index = 0;
-		static const char *short_options = "hvpAVr";
+		static const char *short_options = "hvpAVre";
 		static const struct option long_options[] = {
 			{ "help", no_argument, 0, 'h' },
 			{ "verbose", no_argument, 0, 'v' },
@@ -195,6 +196,7 @@ int main(int argc, char *argv[])
 			{ "erase-all", no_argument, 0, 'A' },
 			{ "version", no_argument, 0, 'V' },
 			{ "read_from_flash", no_argument, 0, 'r' },
+			{ "external_cable", no_argument, 0, 'e' },
 			{ 0, 0, 0, 0 },
 		};
 
@@ -228,6 +230,11 @@ int main(int argc, char *argv[])
 		case 'r':
 			gpio_set_value(RESET_GPIO, "1");
 			gpio_set_value(CONDONE_GPIO, "1");
+			exit(EXIT_SUCCESS);
+			break;
+		case 'e':
+			gpio_set_value(RESET_GPIO, "0");
+			gpio_set_value(CONDONE_GPIO, "0");
 			exit(EXIT_SUCCESS);
 			break;
 		default:
