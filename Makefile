@@ -1,6 +1,13 @@
-all:
-	gcc flashcp.c h2b.c -o fcp
-	gcc read_from_flash.c -o read_from_flash
+CC := clang
+CFLAGS := -Wall -Wextra
+
+SRC := main.c flashcp.c h2b.c
+
+all: fcp
+
+fcp: $(SRC)
+	@$(CC) $(CFLAGS) $(SRC) -o fcp || \
+	gcc $(CFLAGS) $(SRC) -o fcp
 
 clean:
-	rm -rf fcp read_from_flash
+	rm -rf fcp
